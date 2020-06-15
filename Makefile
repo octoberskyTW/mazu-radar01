@@ -1,7 +1,8 @@
 .PHONY: all check clean
 TARGET = radar01
 GIT_HOOKS := .git/hooks/applied
-all: $(GIT_HOOKS) $(TARGET)
+
+all: $(GIT_HOOKS) $(TARGET) $(C_SOURCES)
 
 $(GIT_HOOKS):
 	@scripts/install-git-hooks
@@ -9,24 +10,28 @@ $(GIT_HOOKS):
 
 include common.mk
 
-CFLAGS = -I./src
-CFLAGS += -O2
+CFLAGS = -I./
+CFLAGS += -Os
 CFLAGS += -std=gnu99 -Wall -W
 CFLAGS += -DUNUSED="__attribute__((unused))"
 CFLAGS += -DNDEBUG
 LDFLAGS =
 
-# standard build rules
-.SUFFIXES: .o .c
-.c.o:
+
+##### C Source #####
+C_SOURCES = \
+        ./radar01_main.c \
+        ./radar01_io.c
+####################
+OBJECTS = $(patsubst %.c, %.o, $(C_SOURCES))
+
+deps += $(OBJECTS:%.o=%.o.d)
+
+%.o: %.c
 	$(VECHO) "  CC\t$@\n"
 	$(Q)$(CC) -o $@ $(CFLAGS) -c -MMD -MF $@.d $<
 
-OBJS = \
-    radar01_main.o
-deps += $(OBJS:%.o=%.o.d)
-
-$(TARGET): $(OBJS)
+$(TARGET): $(OBJECTS)
 	$(VECHO) "  LD\t$@\n"
 	$(Q)$(CC) -o $@ $^ $(LDFLAGS)
 
@@ -35,6 +40,6 @@ check: all
 
 clean:
 	$(VECHO) "  Cleaning...\n"
-	$(Q)$(RM) $(TARGET) $(OBJS) $(deps)
+	$(Q)$(RM) $(TARGET) $(OBJECTS) $(deps)
 
 -include $(deps)
