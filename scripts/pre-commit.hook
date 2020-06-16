@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
 CPPCHECK_suppresses="--suppress=missingIncludeSystem \
-	             --suppress=unusedFunction:http_parser.c \
+	                 --suppress=unusedFunction:http_parser.c \
                      --suppress=duplicateBreak:http_parser.c \
-                     --suppress=shadowVariable:http_parser.c"
-CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses ."
+                     --suppress=shadowVariable:http_parser.c \
+                     --suppress=unusedFunction"
+CPPCHECK_OPTS="-I. --enable=style,performance,portability,information,missingInclude \
+               --error-exitcode=1 --force $CPPCHECK_suppresses ."
 
 RETURN=0
 CLANG_FORMAT=$(which clang-format)
@@ -31,6 +33,8 @@ if [ $? -ne 0 ]; then
 fi
 
 FILES=`git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h)$"`
+counter=0
+fix_files_arr=[]
 for FILE in $FILES; do
     nf=`git checkout-index --temp $FILE | cut -f 1`
     tempdir=`mktemp -d` || exit 1
@@ -53,12 +57,14 @@ for FILE in $FILES; do
         echo "" >&2
         echo "Make sure you indent as the following:" >&2
         echo "    clang-format -i $FILE" >&2
+        fix_files_arr[counter]="clang-format -i $FILE"
+        counter=$((counter+1))
         echo
     fi
 done
 
 echo "Following files need to be cleaned up:"
-echo "${FILES[*]}"
+echo ${fix_files_arr[*]}
 
 # Prevent unsafe functions
 root=$(git rev-parse --show-toplevel)
