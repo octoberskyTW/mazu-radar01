@@ -15,4 +15,6 @@ struct radar01_io_info_t {
     int dss_fd;
 };
 int radar01_io_init(char *ifname, void **priv_data);
+void radar01_io_deinit(void **priv_data);
+int radar01_data_recv(int fd, uint8_t *rx_buff, int buff_size);
 #endif  //  __RADAR01_IO_H__

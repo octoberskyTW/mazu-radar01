@@ -57,14 +57,14 @@ for FILE in $FILES; do
         echo "" >&2
         echo "Make sure you indent as the following:" >&2
         echo "    clang-format -i $FILE" >&2
-        fix_files_arr[counter]="clang-format -i $FILE"
+        fix_files_arr[counter]=" $FILE"
         counter=$((counter+1))
         echo
     fi
 done
 
 echo "Following files need to be cleaned up:"
-echo ${fix_files_arr[*]}
+echo "[Fix it] clang-format -i "${fix_files_arr[*]}
 
 # Prevent unsafe functions
 root=$(git rev-parse --show-toplevel)
