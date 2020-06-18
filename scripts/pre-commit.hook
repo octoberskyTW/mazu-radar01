@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
 CPPCHECK_suppresses="--suppress=missingIncludeSystem \
-	                 --suppress=unusedFunction:http_parser.c \
+                     --suppress=unusedFunction:http_parser.c \
                      --suppress=duplicateBreak:http_parser.c \
                      --suppress=shadowVariable:http_parser.c \
                      --suppress=unusedFunction"
 CPPCHECK_OPTS="-I. --enable=style,performance,portability,information,missingInclude \
                --error-exitcode=1 --force $CPPCHECK_suppresses ."
+
+EXCLUDE_FOLDER_CLANG=':!vender/*'
 
 RETURN=0
 CLANG_FORMAT=$(which clang-format)
@@ -32,7 +34,8 @@ if [ $? -ne 0 ]; then
     DIFF=diff
 fi
 
-FILES=`git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h)$"`
+FILES=`git diff --cached --name-only --diff-filter=ACMR $EXCLUDE_FOLDER_CLANG | grep -E "\.(c|cpp|h)$"`
+
 counter=0
 fix_files_arr=[]
 for FILE in $FILES; do

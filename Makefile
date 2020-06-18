@@ -10,7 +10,7 @@ $(GIT_HOOKS):
 
 include common.mk
 
-CFLAGS = -I./
+CFLAGS = -I./ -I./vender
 CFLAGS += -Os
 CFLAGS += -std=gnu99 -Wall -W
 CFLAGS += -DUNUSED="__attribute__((unused))"

@@ -2,7 +2,7 @@
 #define __RADAR01_UTILS_H__
 #include "linux_common.h"
 
-#define RADAR01_DEBUG_ENABLE 1
+#define RADAR01_DEBUG_ENABLE 0
 #define TRUE 1
 #define FALSE 0
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
