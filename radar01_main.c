@@ -22,55 +22,46 @@ static void server_err(const char *str)
 struct radar01_io_info_t *iwr1642_dss_blk;
 struct radar01_io_info_t *iwr1642_mss_blk;
 
-static int radar01_header_parser(int fd, uint8_t *rx_buff, int buff_size)
+static int radar01_receive_process(int fd,
+                                   uint8_t *rx_buff,
+                                   int max_size,
+                                   int epoll_fd,
+                                   struct epoll_event *ev_recv)
 {
-    int offset;
+    int offset = 0;
     MmwDemo_output_message_header msg_header = {0};
-    MmwDemo_output_message_tl tlv = {0};
-    DPIF_PointCloudCartesian vector = {0};
+    static uint16_t magicWord[4] = {0x0102, 0x0304, 0x0506, 0x0708};
     offset = radar01_data_recv(fd, rx_buff, MSG_HEADER_LENS);
-    if (offset == MSG_HEADER_LENS) {
-        static uint16_t magicWord[4] = {0x0102, 0x0304, 0x0506, 0x0708};
-        if (memcmp(rx_buff, magicWord, 8) == 0) {
-            if (offset > 0) {
-                debug_hex_dump("DSS Header ", rx_buff, offset);
-                memcpy(&msg_header, rx_buff, MSG_HEADER_LENS);
-            }
-            // Workaround here
-            msg_header.totalPacketLen = 128;
-            while (offset < msg_header.totalPacketLen) {
-                int rdlen = 0;
-                rdlen = radar01_data_recv(fd, rx_buff + offset,
-                                          msg_header.totalPacketLen - offset);
-                if (rdlen < 0) {
-                    if (errno == EINTR || errno == EAGAIN ||
-                        errno == EWOULDBLOCK) {
-                        rdlen = 0;
-                    } else {
-                        printf("%s:%d: rdlen = %d, %s\n", __func__, __LINE__,
-                               rdlen, strerror(errno));
-                        return -1;
-                    }
-                } else if (rdlen == 0) {
-                    break;
-                }
-                offset += rdlen;
-            }  // while
-            debug_hex_dump("DSS Header+Content ", rx_buff,
-                           msg_header.totalPacketLen);
-            uint32_t cur = MSG_HEADER_LENS;
-            memcpy(&tlv, rx_buff + cur, sizeof(tlv));
-            cur += sizeof(tlv);
-            int obj_nums = tlv.length / sizeof(DPIF_PointCloudCartesian);
-            for (int i = 0; i < 3; i++) {
-                memcpy(&vector, rx_buff + cur,
-                       sizeof(DPIF_PointCloudCartesian));
-                printf("Object%d, %f, %f, %f, %f \n", i, vector.x, vector.y,
-                       vector.z, vector.velocity);
-                cur += sizeof(DPIF_PointCloudCartesian);
-            }
-        }
+    debug_hex_dump("DSS Header ", rx_buff, offset);
+    if (memcmp(rx_buff, magicWord, 8) != 0) {
+        printf("[%s:%d] Packet header Magic number not match.\n", __FUNCTION__,
+               __LINE__);
+        return 0;
     }
+    memcpy(&msg_header, rx_buff, MSG_HEADER_LENS);
+    max_size = (int) msg_header.totalPacketLen < max_size
+                   ? (int) msg_header.totalPacketLen
+                   : max_size;
+    while (offset < max_size) {
+        int rdlen = 0;
+        int epoll_events_count;
+        if ((epoll_events_count =
+                 epoll_wait(epoll_fd, ev_recv, 1024, EPOLL_RUN_TIMEOUT)) < 0)
+            printf("[%s:%d] Remain packet received fail. [ERROR]: %s\n",
+                   __FUNCTION__, __LINE__, strerror(errno));
+
+        for (int i = 0; i < epoll_events_count; i++) {
+            if (ev_recv[i].data.fd != fd)
+                continue;
+            rdlen = radar01_data_recv(fd, rx_buff + offset, max_size - offset);
+            offset += rdlen;
+        }
+    }  // while
+    debug_hex_dump("DSS Header+Content ", rx_buff, max_size);
+    if (offset != max_size)
+        printf(
+            "[%s:%d] [WARNING] Received pkt size not patch. %d, expected %d \n",
+            __FUNCTION__, __LINE__, offset, max_size);
     return offset;
 }
 
@@ -115,7 +106,8 @@ int main(int argc, char const *argv[])
         for (int i = 0; i < epoll_events_count; i++) {
             /* EPOLLIN event for listener (new client connection) */
             if (ev_recv[i].data.fd == iwr1642_dss_blk->dss_fd) {
-                radar01_header_parser(iwr1642_dss_blk->dss_fd, data_buff, 1024);
+                radar01_receive_process(iwr1642_dss_blk->dss_fd, data_buff,
+                                        1024, epoll_fd, ev_recv);
             } else {
                 // /* EPOLLIN event for others (new incoming message from
                 // client)
