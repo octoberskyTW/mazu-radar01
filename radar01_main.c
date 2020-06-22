@@ -35,8 +35,8 @@ static int radar01_receive_process(int fd,
     offset = radar01_data_recv(fd, rx_buff, MSG_HEADER_LENS);
     debug_hex_dump("DSS Header ", rx_buff, offset);
     if (memcmp(rx_buff, magicWord, 8) != 0) {
-        printf("[%s:%d] Magic number not match ignore the packet.\n",
-               __FUNCTION__, __LINE__);
+        printf("[%s] Header Magic number not match, Drop it !!.\n",
+               __FUNCTION__);
         return -1;
     }
     memcpy(&msg_header, rx_buff, MSG_HEADER_LENS);
@@ -97,7 +97,7 @@ int main(int argc, char const *argv[])
         server_err("Fail to control epoll");
     printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
 
-    // printf("Object i, x, y, z, velocity\n");
+    printf("Frame Seq, Obj_i, x, y, z, velocity, snr, noise\n");
     while (1) {
         int epoll_events_count;
         if ((epoll_events_count = epoll_wait(epoll_fd, ev_recv, EPOLL_SIZE,
