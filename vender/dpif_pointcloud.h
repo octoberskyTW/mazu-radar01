@@ -46,7 +46,7 @@
 /* MMWAVE SDK Include Files */
 // #include <ti/common/sys_types.h>
 // #include <ti/datapath/dpif/dpif_types.h>
-
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif

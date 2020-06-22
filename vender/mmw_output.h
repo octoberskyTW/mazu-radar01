@@ -43,6 +43,7 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
 // #include <ti/common/sys_common.h>
 // #include <ti/datapath/dpc/objectdetection/objdetdsp/objectdetection.h>
 

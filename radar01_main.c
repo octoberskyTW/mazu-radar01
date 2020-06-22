@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <sys/epoll.h>
 #include "radar01_io.h"
+#include "radar01_tlv.h"
 #include "radar01_utils.h"
 #include "vender/dpif_pointcloud.h"
 #include "vender/mmw_output.h"
@@ -34,9 +35,9 @@ static int radar01_receive_process(int fd,
     offset = radar01_data_recv(fd, rx_buff, MSG_HEADER_LENS);
     debug_hex_dump("DSS Header ", rx_buff, offset);
     if (memcmp(rx_buff, magicWord, 8) != 0) {
-        printf("[%s:%d] Packet header Magic number not match.\n", __FUNCTION__,
-               __LINE__);
-        return 0;
+        printf("[%s:%d] Magic number not match ignore the packet.\n",
+               __FUNCTION__, __LINE__);
+        return -1;
     }
     memcpy(&msg_header, rx_buff, MSG_HEADER_LENS);
     max_size = (int) msg_header.totalPacketLen < max_size
@@ -70,6 +71,7 @@ int main(int argc, char const *argv[])
     int rc = 0;
     /* code */
     uint8_t *data_buff = (uint8_t *) calloc(1, 1024);
+    struct radar01_message_data_t Cartesian;
     if (!data_buff)
         return -1;
     rc = radar01_io_init("/dev/ttyACM1", (void *) &iwr1642_dss_blk);
@@ -95,7 +97,7 @@ int main(int argc, char const *argv[])
         server_err("Fail to control epoll");
     printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
 
-    printf("Object i, x, y, z, velocity\n");
+    // printf("Object i, x, y, z, velocity\n");
     while (1) {
         int epoll_events_count;
         if ((epoll_events_count = epoll_wait(epoll_fd, ev_recv, EPOLL_SIZE,
@@ -106,8 +108,14 @@ int main(int argc, char const *argv[])
         for (int i = 0; i < epoll_events_count; i++) {
             /* EPOLLIN event for listener (new client connection) */
             if (ev_recv[i].data.fd == iwr1642_dss_blk->dss_fd) {
-                radar01_receive_process(iwr1642_dss_blk->dss_fd, data_buff,
-                                        1024, epoll_fd, ev_recv);
+                int size =
+                    radar01_receive_process(iwr1642_dss_blk->dss_fd, data_buff,
+                                            1024, epoll_fd, ev_recv);
+                if (size > 0) {
+                    radar01_process_message(data_buff, size, &Cartesian);
+                    radar01_Cartesian_info_dump(&Cartesian);
+                }
+
             } else {
                 // /* EPOLLIN event for others (new incoming message from
                 // client)

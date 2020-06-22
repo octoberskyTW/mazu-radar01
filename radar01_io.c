@@ -56,7 +56,7 @@ static int set_interface_attribs(int fd, int speed, int parity)
 
 
     // Set the new attributes
-    if ((rc = tcsetattr(fd, TCSANOW, &options)) < 0) {
+    if ((rc = tcsetattr(fd, TCSAFLUSH, &options)) < 0) {
         printf("[%s:%d] Fail to set attr, rc = %d [ERROR]: %s\n", __FUNCTION__,
                __LINE__, rc, strerror(errno));
         return rc;
@@ -69,6 +69,10 @@ static int set_interface_attribs(int fd, int speed, int parity)
         printf("[%s:%d] Fail to set attr, rc = %d [ERROR]: %s\n", __FUNCTION__,
                __LINE__, rc, strerror(errno));
     }
+
+    if ((rc = tcflush(fd, TCIOFLUSH)) != 0)
+        printf("[%s:%d] Fail to flush i/o buffer, rc = %d [ERROR]: %s\n",
+               __FUNCTION__, __LINE__, rc, strerror(errno));
     return rc;
 }
 
