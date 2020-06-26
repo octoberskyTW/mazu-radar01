@@ -14,7 +14,7 @@ int radar01_process_message(uint8_t *rx_buff,
     memset((uint8_t *) out_data, 0, sizeof(struct radar01_message_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
     // if(RADAR01_DEBUG_ENABLE)
-    printf("Frame Num %u: DetectedObjs %u: numTLVs %u \n", msgh.frameNumber,
+    printf("Frame %u: DetectedObjs=%u : numTLVs=%u\n", msgh.frameNumber,
            msgh.numDetectedObj, msgh.numTLVs);
     out_data->frameNumber = msgh.frameNumber;
     out_data->numDetectedObj = msgh.numDetectedObj;
