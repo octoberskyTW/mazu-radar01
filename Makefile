@@ -15,7 +15,7 @@ CFLAGS += -Os
 CFLAGS += -std=gnu99 -Wall -W
 CFLAGS += -DUNUSED="__attribute__((unused))"
 CFLAGS += -DNDEBUG
-LDFLAGS =
+LDFLAGS += -lpthread
 
 
 ##### C Source #####

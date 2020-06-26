@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <sys/epoll.h>
 #include "radar01_io.h"
@@ -5,7 +6,6 @@
 #include "radar01_utils.h"
 #include "vender/dpif_pointcloud.h"
 #include "vender/mmw_output.h"
-
 
 
 #define EPOLL_SIZE 256
@@ -65,13 +65,57 @@ static int radar01_receive_process(int fd,
     return offset;
 }
 
+struct device_worker_info {
+    int epoll_fd;
+    struct epoll_event ev_recv[EPOLL_SIZE];
+    int dss_fd;
+    uint8_t data_buff[1024];
+    struct radar01_message_data_t Cartesian;
+};
+
+void *device_worker(void *v_param)
+{
+    struct device_worker_info *winfo;
+    winfo = (struct device_worker_info *) v_param;
+    while (1) {
+        int epoll_events_count;
+        if ((epoll_events_count =
+                 epoll_wait(winfo->epoll_fd, &winfo->ev_recv[0], EPOLL_SIZE,
+                            EPOLL_RUN_TIMEOUT)) < 0)
+            server_err("Fail to wait epoll");
+        // printf("epoll event count: %d\n", epoll_events_count);
+        //        clock_t start_time = clock();
+        for (int i = 0; i < epoll_events_count; i++) {
+            /* EPOLLIN event for listener (new client connection) */
+            if (winfo->ev_recv[i].data.fd == winfo->dss_fd) {
+                int size = radar01_receive_process(
+                    winfo->dss_fd, &winfo->data_buff[0], 1024, winfo->epoll_fd,
+                    &winfo->ev_recv[0]);
+                if (size > 0) {
+                    radar01_process_message(&winfo->data_buff[0], size,
+                                            &winfo->Cartesian);
+                    radar01_Cartesian_info_dump(&winfo->Cartesian);
+                }
+
+            } else {
+                // /* EPOLLIN event for others (new incoming message from
+                // client)
+                //  */
+                // if (handle_message_from_client(events[i].data.fd, &list) < 0)
+                //     server_err("Handle message from client", &list);
+            }
+        }
+    }
+    return NULL;
+}
+
 int main(int argc, char const *argv[])
 {
     int rc = 0;
     /* code */
-    uint8_t *data_buff = (uint8_t *) calloc(1, 1024);
-    struct radar01_message_data_t Cartesian;
-    if (!data_buff)
+    struct device_worker_info *dev_worker;
+    dev_worker = calloc(1, sizeof(struct device_worker_info));
+    if (!dev_worker)
         return -1;
     rc = radar01_io_init("/dev/ttyACM1", (void *) &iwr1642_dss_blk);
     if (rc < 0) {
@@ -85,7 +129,6 @@ int main(int argc, char const *argv[])
         }
 
     int epoll_fd;
-    static struct epoll_event ev_recv[EPOLL_SIZE];
     if ((epoll_fd = epoll_create(EPOLL_SIZE)) < 0)
         server_err("Fail to create epoll");
 
@@ -95,35 +138,16 @@ int main(int argc, char const *argv[])
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, iwr1642_dss_blk->dss_fd, &ev) < 0)
         server_err("Fail to control epoll");
     printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
-
+    dev_worker->epoll_fd = epoll_fd;
+    dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
     printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
-    while (1) {
-        int epoll_events_count;
-        if ((epoll_events_count = epoll_wait(epoll_fd, ev_recv, EPOLL_SIZE,
-                                             EPOLL_RUN_TIMEOUT)) < 0)
-            server_err("Fail to wait epoll");
-        // printf("epoll event count: %d\n", epoll_events_count);
-        //        clock_t start_time = clock();
-        for (int i = 0; i < epoll_events_count; i++) {
-            /* EPOLLIN event for listener (new client connection) */
-            if (ev_recv[i].data.fd == iwr1642_dss_blk->dss_fd) {
-                int size =
-                    radar01_receive_process(iwr1642_dss_blk->dss_fd, data_buff,
-                                            1024, epoll_fd, ev_recv);
-                if (size > 0) {
-                    radar01_process_message(data_buff, size, &Cartesian);
-                    radar01_Cartesian_info_dump(&Cartesian);
-                }
 
-            } else {
-                // /* EPOLLIN event for others (new incoming message from
-                // client)
-                //  */
-                // if (handle_message_from_client(events[i].data.fd, &list) < 0)
-                //     server_err("Handle message from client", &list);
-            }
-        }
-    }
+    pthread_t dev_tid0;
+    pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
+
+    void *cancel_hook = NULL;
+    pthread_join(dev_tid0, &cancel_hook);
+
     radar01_io_deinit((void *) &iwr1642_dss_blk);
     close(epoll_fd);
     exit(0);
