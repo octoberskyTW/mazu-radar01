@@ -7,7 +7,7 @@ struct radar01_http_info_t {
     /* http://49.159.114.50:10002/2020test/2020test?data=[{"x":"0.02","y":"0.01","value":"20"}]
      */
     char sever_url[256];
-    char net_port;
+    int net_port;
 };
 
 int radar01_http_socket_init(char *ifname, void **priv_data);

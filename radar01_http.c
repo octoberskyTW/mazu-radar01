@@ -38,14 +38,16 @@ int radar01_http_socket_init(char *ifname, void **priv_data)
                      sizeof(hp->http_addr));
         if (rc < 0) {
             retry_cnt++;
+            sleep(2);
             printf("[%s:%d] Connection retry %d errno: %s\n", __FUNCTION__,
                    __LINE__, retry_cnt, strerror(errno));
         }
     } while (rc && errno == EINTR && retry_cnt < 5);
 
     if (rc < 0) {
-        printf("[%s:%d] Connect to %s failed. Abort http init. errno: %s\n",
-               __FUNCTION__, __LINE__, ifname, strerror(errno));
+        printf("[%s:%d] Connect to %s:%d failed. Abort http init. errno: %s\n",
+               __FUNCTION__, __LINE__, hp->sever_url, hp->net_port,
+               strerror(errno));
         goto failed_connect;
     }
     printf("[%s:%d] HTTP Connection Create on %s\n", __FUNCTION__, __LINE__,
@@ -67,7 +69,7 @@ int radar01_http_socket_deinit(void **priv_data)
     struct radar01_http_info_t *hp = *priv_data;
     if (hp) {
         close(hp->client_fd);
-        printf("Closing %s \n", hp->sever_url);
+        printf("Closing %s:%d \n", hp->sever_url, hp->net_port);
         free(hp);
         *priv_data = NULL;
     }
