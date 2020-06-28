@@ -143,11 +143,15 @@ int main(int argc, char const *argv[])
     printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
 
     pthread_t dev_tid0;
-    pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
+    rc = pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
+    if (rc < 0) {
+        printf("[ERROR] Device Thread create fail rc = %d\n", rc);
+        goto exit_0;
+    }
 
     void *cancel_hook = NULL;
     pthread_join(dev_tid0, &cancel_hook);
-
+exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
     close(epoll_fd);
     exit(0);
