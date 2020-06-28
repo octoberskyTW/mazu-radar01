@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
 #include "radar01_io.h"
@@ -18,6 +19,13 @@ static void server_err(const char *str)
 {
     perror(str);
     exit(-1);
+}
+
+static int exit_i = 0;
+static void signal_exit(int signal)
+{
+    (void) signal;
+    exit_i++;
 }
 
 struct radar01_io_info_t *iwr1642_dss_blk;
@@ -77,7 +85,7 @@ void *device_worker(void *v_param)
 {
     struct device_worker_info *winfo;
     winfo = (struct device_worker_info *) v_param;
-    while (1) {
+    while (!exit_i) {
         int epoll_events_count;
         if ((epoll_events_count =
                  epoll_wait(winfo->epoll_fd, &winfo->ev_recv[0], EPOLL_SIZE,
@@ -109,9 +117,28 @@ void *device_worker(void *v_param)
     return NULL;
 }
 
+void *http_worker(void *v_param)
+{
+    return NULL;
+}
+
+
+
 int main(int argc, char const *argv[])
 {
     int rc = 0;
+    /*Signal Handleer*/
+    __sighandler_t ret = signal(SIGINT, signal_exit);
+    if (ret == SIG_ERR) {
+        perror("signal(SIGINT, handler)");
+        exit(0);
+    }
+
+    ret = signal(SIGTERM, signal_exit);
+    if (ret == SIG_ERR) {
+        perror("signal(SIGTERM, handler)");
+        exit(0);
+    }
     /* code */
     struct device_worker_info *dev_worker;
     dev_worker = calloc(1, sizeof(struct device_worker_info));
