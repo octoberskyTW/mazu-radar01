@@ -119,8 +119,41 @@ void *device_worker(void *v_param)
     return NULL;
 }
 
+struct http_worker_info {
+    int epoll_fd;
+    struct epoll_event ev_recv[EPOLL_SIZE];
+    int http_fd;
+    uint8_t data_buff[1024];
+};
+
+/* ToDo: Use epoll socket */
 void *http_worker(void *v_param)
 {
+    struct http_worker_info *winfo;
+    winfo = (struct http_worker_info *) v_param;
+    char buffer[1024] = {0};
+    int offset = 0;
+    snprintf(buffer, 1024, "GET /2020test/2020test?");
+    offset = strlen(buffer);
+    snprintf(buffer + offset, 1024,
+             "data=[{\"x\":\"7788\",\"y\":\"5566\",\"value\":\"1818\"}] "
+             "HTTP/1.0\r\n\r\n");
+
+    printf("SENDING: %s", buffer);
+    printf("===\n");
+
+    // For this trivial demo just assume write() sends all bytes in one go and
+    // is not interrupted
+
+    write(winfo->http_fd, buffer, strlen(buffer));
+
+    int len = read(winfo->http_fd, &winfo->data_buff[0], 999);
+    winfo->data_buff[len] = '\0';
+    printf("%s\n", winfo->data_buff);
+    memset(winfo->data_buff, 0, 1024);
+    len = read(winfo->http_fd, &winfo->data_buff[0], 999);
+    winfo->data_buff[len] = '\0';
+    printf("%s\n", winfo->data_buff);
     return NULL;
 }
 
@@ -171,7 +204,19 @@ int main(int argc, char const *argv[])
     dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
 
     /* HTTP CLient Init*/
-    radar01_http_socket_init("49.159.114.50:10002", (void *) &arstu_server_blk);
+    struct http_worker_info *http_winfo;
+    http_winfo = calloc(1, sizeof(struct http_worker_info));
+    uint8_t is_hp_worker_ready = 0;
+    if (http_winfo) {
+        rc = radar01_http_socket_init("49.159.114.50:10002",
+                                      (void *) &arstu_server_blk);
+        if (rc < 0)
+            is_hp_worker_ready = 0;
+        else {
+            http_winfo->http_fd = arstu_server_blk->client_fd;
+            is_hp_worker_ready = 1;
+        }
+    }
 
     printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
 
@@ -181,9 +226,18 @@ int main(int argc, char const *argv[])
         printf("[ERROR] Device Thread create fail rc = %d\n", rc);
         goto exit_0;
     }
-
+    pthread_t hp_tid1;
+    if (is_hp_worker_ready) {
+        rc = pthread_create(&hp_tid1, 0, &http_worker, (void *) http_winfo);
+        if (rc < 0) {
+            printf("[ERROR] HTTP Thread create fail rc = %d\n", rc);
+            goto exit_0;
+        }
+    }
     void *cancel_hook = NULL;
     pthread_join(dev_tid0, &cancel_hook);
+    pthread_join(hp_tid1, &cancel_hook);
+
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
     radar01_http_socket_deinit((void *) &arstu_server_blk);

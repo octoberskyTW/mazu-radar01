@@ -1,4 +1,5 @@
 #include "radar01_http.h"
+#include <fcntl.h>
 #include "linux_common.h"
 
 int radar01_http_socket_init(char *ifname, void **priv_data)
@@ -32,17 +33,23 @@ int radar01_http_socket_init(char *ifname, void **priv_data)
         hp->net_port = atoi(token);
     hp->http_addr.sin_port = htons(hp->net_port);
     /* Try to Connect to server*/
+    // int setflag = fcntl(hp->client_fd, F_GETFL);
+    // setflag = setflag | O_NONBLOCK;
+    // fcntl(hp->client_fd, F_SETFL, setflag);
+
     int retry_cnt = 0;
     do {
         rc = connect(hp->client_fd, (struct sockaddr *) &hp->http_addr,
                      sizeof(hp->http_addr));
-        if (rc < 0) {
+        if (rc == 0)
+            break;
+        if (rc < 0 || errno == EINPROGRESS) {
             retry_cnt++;
             sleep(2);
             printf("[%s:%d] Connection retry %d errno: %s\n", __FUNCTION__,
                    __LINE__, retry_cnt, strerror(errno));
         }
-    } while (rc && errno == EINTR && retry_cnt < 5);
+    } while (retry_cnt < 5);
 
     if (rc < 0) {
         printf("[%s:%d] Connect to %s:%d failed. Abort http init. errno: %s\n",
