@@ -2,6 +2,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
+#include "radar01_http.h"
 #include "radar01_io.h"
 #include "radar01_tlv.h"
 #include "radar01_utils.h"
@@ -11,7 +12,7 @@
 
 #define EPOLL_SIZE 256
 #define BUF_SIZE 512
-#define EPOLL_RUN_TIMEOUT -1
+#define EPOLL_RUN_TIMEOUT 1000
 
 #define MSG_HEADER_LENS (sizeof(MmwDemo_output_message_header))
 
@@ -21,15 +22,16 @@ static void server_err(const char *str)
     exit(-1);
 }
 
+struct radar01_io_info_t *iwr1642_dss_blk;
+struct radar01_io_info_t *iwr1642_mss_blk;
+struct radar01_http_info_t *arstu_server_blk;
+
 static int exit_i = 0;
 static void signal_exit(int signal)
 {
     (void) signal;
     exit_i++;
 }
-
-struct radar01_io_info_t *iwr1642_dss_blk;
-struct radar01_io_info_t *iwr1642_mss_blk;
 
 static int radar01_receive_process(int fd,
                                    uint8_t *rx_buff,
@@ -167,6 +169,10 @@ int main(int argc, char const *argv[])
     printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
     dev_worker->epoll_fd = epoll_fd;
     dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
+
+    /* HTTP CLient Init*/
+    radar01_http_socket_init("49.159.114.50:10002", (void *) &arstu_server_blk);
+
     printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
 
     pthread_t dev_tid0;
@@ -180,6 +186,7 @@ int main(int argc, char const *argv[])
     pthread_join(dev_tid0, &cancel_hook);
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
+    radar01_http_socket_deinit((void *) &arstu_server_blk);
     close(epoll_fd);
     exit(0);
 }

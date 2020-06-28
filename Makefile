@@ -23,7 +23,8 @@ C_SOURCES = \
         ./radar01_main.c \
         ./radar01_io.c \
 		./radar01_utils.c \
-		./radar01_tlv.c
+		./radar01_tlv.c \
+		./radar01_http.c
 ####################
 OBJECTS = $(patsubst %.c, %.o, $(C_SOURCES))
 
