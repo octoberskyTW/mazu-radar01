@@ -180,8 +180,15 @@ int main(int argc, char const *argv[])
     if (!dev_worker)
         return -1;
     rc = radar01_io_init("/dev/ttyACM1", (void *) &iwr1642_dss_blk);
+    uint8_t is_device_worker_ready = 0;
     if (rc < 0) {
-        server_err("Fail to radar01_io_init");
+        is_device_worker_ready = 0;
+        printf("[Warning] Fail to radar01_io_init. skipped\n");
+        iwr1642_dss_blk = NULL;
+        if (dev_worker)
+            free(dev_worker);
+    } else {
+        is_device_worker_ready = 1;
     }
 
     int ep_event = 0;
@@ -189,19 +196,21 @@ int main(int argc, char const *argv[])
         if (strcmp(argv[1], "-et") == 0) {
             ep_event = EPOLLET;
         }
-
+    /*Device IO init */
     int epoll_fd;
+    static struct epoll_event ev;
     if ((epoll_fd = epoll_create(EPOLL_SIZE)) < 0)
         server_err("Fail to create epoll");
-
-    static struct epoll_event ev;
-    ev.events = EPOLLIN | ep_event;
-    ev.data.fd = iwr1642_dss_blk->dss_fd;
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, iwr1642_dss_blk->dss_fd, &ev) < 0)
-        server_err("Fail to control epoll");
-    printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
-    dev_worker->epoll_fd = epoll_fd;
-    dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
+    if (is_device_worker_ready) {
+        ev.events = EPOLLIN | ep_event;
+        ev.data.fd = iwr1642_dss_blk->dss_fd;
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, iwr1642_dss_blk->dss_fd, &ev) <
+            0)
+            server_err("Fail to control epoll");
+        printf("Listener (fd=%d) was added to epoll.\n", epoll_fd);
+        dev_worker->epoll_fd = epoll_fd;
+        dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
+    }
 
     /* HTTP CLient Init*/
     struct http_worker_info *http_winfo;
@@ -217,15 +226,18 @@ int main(int argc, char const *argv[])
             is_hp_worker_ready = 1;
         }
     }
-
-    printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
+    if (is_device_worker_ready)
+        printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
 
     pthread_t dev_tid0;
-    rc = pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
-    if (rc < 0) {
-        printf("[ERROR] Device Thread create fail rc = %d\n", rc);
-        goto exit_0;
+    if (is_device_worker_ready) {
+        rc = pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
+        if (rc < 0) {
+            printf("[ERROR] Device Thread create fail rc = %d\n", rc);
+            goto exit_0;
+        }
     }
+
     pthread_t hp_tid1;
     if (is_hp_worker_ready) {
         rc = pthread_create(&hp_tid1, 0, &http_worker, (void *) http_winfo);
@@ -235,8 +247,10 @@ int main(int argc, char const *argv[])
         }
     }
     void *cancel_hook = NULL;
-    pthread_join(dev_tid0, &cancel_hook);
-    pthread_join(hp_tid1, &cancel_hook);
+    if (is_device_worker_ready)
+        pthread_join(dev_tid0, &cancel_hook);
+    if (is_hp_worker_ready)
+        pthread_join(hp_tid1, &cancel_hook);
 
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
