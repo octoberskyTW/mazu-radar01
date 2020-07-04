@@ -4,7 +4,7 @@
 #include "radar01_share_msg.h"
 
 #define RADAR01_DEBUG_ENABLE 0
-#define RADAR01_SHARE_MSG_DEBUG_ENABLE 1
+#define RADAR01_SHARE_MSG_DEBUG_ENABLE 0
 #define RADAR01_CSV_DEBUG_ENABLE 0
 #define TRUE 1
 #define FALSE 0
