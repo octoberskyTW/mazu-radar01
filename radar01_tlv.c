@@ -1,6 +1,7 @@
 #include "radar01_tlv.h"
 #include "linux_common.h"
 #include "radar01_utils.h"
+#include "ringbuffer.h"
 #include "vender/mmw_output.h"
 
 int radar01_process_message(uint8_t *rx_buff,
@@ -60,4 +61,17 @@ void radar01_Cartesian_info_dump(struct radar01_message_data_t *data)
                points[i].x, points[i].y, points[i].z, points[i].velocity,
                side_info[i].snr, side_info[i].noise);
     }
+}
+
+int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size)
+{
+    uint8_t *txcell = (uint8_t *) radar01_alloc_mem(size);
+    if (txcell == NULL) {
+        fprintf(stderr, "[%s:%d] txcell allocate fail!!\n", __func__, __LINE__);
+        goto empty;
+    }
+    memcpy(txcell, payload, size);
+    rb_push(rbuf, txcell);
+empty:
+    return 0;
 }

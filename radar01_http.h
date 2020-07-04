@@ -1,6 +1,7 @@
 #ifndef __RADAR01_HTTP_H__
 #define __RADAR01_HTTP_H__
 #include "linux_common.h"
+#include "ringbuffer.h"
 
 struct radar01_http_conn_t {
     int sockfd;  // http client socket fd
@@ -24,5 +25,6 @@ int http_connect_server(int efd,
                         struct sockaddr_in *http_addr);
 int radar01_http_send(int fd, char *tx_buff, int frame_len);
 int radar01_http_recv(int fd, char *rx_buff, int buff_size);
+int http_ring_dequeue(struct ringbuffer_t *rbuf, void *payload, uint32_t size);
 
 #endif  // __RADAR01_HTTP_H__

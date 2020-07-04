@@ -10,7 +10,7 @@ $(GIT_HOOKS):
 
 include common.mk
 
-CFLAGS = -I./ -I./vender
+CFLAGS = -I./ -I./vender -I./ringbuffer
 CFLAGS += -Os
 CFLAGS += -std=gnu99 -Wall -W
 CFLAGS += -DUNUSED="__attribute__((unused))"
@@ -24,7 +24,8 @@ C_SOURCES = \
         ./radar01_io.c \
 		./radar01_utils.c \
 		./radar01_tlv.c \
-		./radar01_http.c
+		./radar01_http.c \
+		./ringbuffer/ringbuffer.c
 ####################
 OBJECTS = $(patsubst %.c, %.o, $(C_SOURCES))
 

@@ -25,5 +25,6 @@
 
 
 void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen);
-
+void *radar01_alloc_mem(size_t size);
+void radar01_free_mem(void **ptr);
 #endif  // __RADAR01_UTILS_H__

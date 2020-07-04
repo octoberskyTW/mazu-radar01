@@ -31,3 +31,17 @@ double get_curr_time(void)
     clock_get_hw_time(&g_timestamp);
     return g_timestamp.tv_sec + (double) g_timestamp.tv_nsec / (double) BILLION;
 }
+
+void *radar01_alloc_mem(size_t size)
+{
+    return calloc(1, size);
+}
+
+void radar01_free_mem(void **ptr)
+{
+    if (*ptr) {
+        free(*ptr);
+        *ptr = NULL;
+    }
+    return;
+}

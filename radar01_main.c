@@ -6,6 +6,7 @@
 #include "radar01_io.h"
 #include "radar01_tlv.h"
 #include "radar01_utils.h"
+#include "ringbuffer.h"
 #include "vender/dpif_pointcloud.h"
 #include "vender/mmw_output.h"
 
@@ -27,6 +28,7 @@ static void server_err(const char *str)
 struct radar01_io_info_t *iwr1642_dss_blk;
 struct radar01_io_info_t *iwr1642_mss_blk;
 struct radar01_http_user_t *arstu_server_blk;
+static struct ringbuffer_t dss2http_ring = {0};
 
 static int exit_i = 0;
 static void signal_exit(int signal)
@@ -125,6 +127,7 @@ struct http_worker_info {
     int epoll_fd;
     pthread_t tid;
     struct radar01_http_user_t hu;
+    struct ringbuffer_t *rbuf;
 };
 
 /* ToDo: Use epoll socket */
@@ -140,10 +143,11 @@ void *http_worker(void *v_param)
         printf("Fail to create epoll\n");
         goto thread_exit;
     }
+    /*Bind the Ringbuffer*/
+    winfo->rbuf = &dss2http_ring;
     /* Connect to same Host*/
     for (int i = 0; i < CONCURRENCY; ++i)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
-
     char outbuf[1024] = {0};
     snprintf(outbuf, 1024, "GET /2020test/2020test?");
     int outbufsize = strlen(outbuf);
@@ -160,7 +164,7 @@ void *http_worker(void *v_param)
             for (int i = 0; i < CONCURRENCY; ++i)
                 close(hconn[i].sockfd);
             close(winfo->epoll_fd);
-            printf("Closing the epoll_fd and hconn.sockfd !!\n");
+            printf("Closing the epoll_fd and HTTP socket !!\n");
             goto thread_exit;
         }
         int error = 0;
@@ -181,6 +185,7 @@ void *http_worker(void *v_param)
         for (int n = 0; n < nevts; ++n) {
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
+                http_ring_dequeue(winfo->rbuf, NULL, 0);
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
 
@@ -230,6 +235,9 @@ int main(int argc, char const *argv[])
         perror("signal(SIGTERM, handler)");
         exit(0);
     }
+
+    /* Init ringbuffer first */
+    rb_init(&dss2http_ring, 256);
     /* code */
     struct device_worker_info *dev_worker;
     dev_worker = calloc(1, sizeof(struct device_worker_info));
@@ -310,6 +318,7 @@ int main(int argc, char const *argv[])
 
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
+    rb_deinit(&dss2http_ring);
     // radar01_http_socket_deinit((void *) &arstu_server_blk);
     close(epoll_fd);
 }

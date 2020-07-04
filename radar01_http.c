@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include "linux_common.h"
+#include "radar01_utils.h"
 
 int http_connect_server(int efd,
                         struct radar01_http_conn_t *hc,
@@ -117,6 +118,21 @@ int radar01_http_recv(int fd, char *rx_buff, int buff_size)
         offset += rdlen;
     }
     return offset;
+}
+
+
+int http_ring_dequeue(struct ringbuffer_t *rbuf, void *payload, uint32_t size)
+{
+    uint8_t *rxcell = NULL;
+    rb_pop(rbuf, (void **) &rxcell);
+    if (rxcell == NULL)
+        goto empty;
+    memcpy(payload, rxcell, size);
+    radar01_free_mem((void **) &rxcell);
+    debug_hex_dump("http_ring_dequeue", payload, size);
+    return size;
+empty:
+    return 0;
 }
 #if 0
 int radar01_http_socket_init(char *ifname, void **priv_data)
