@@ -93,7 +93,7 @@ int radar01_http_send(int fd, char *tx_buff, int frame_len)
     }
     return offset;
 }
-/* Not work , it would block*/
+
 int radar01_http_recv(int fd, char *rx_buff, int buff_size)
 {
     int offset = 0;

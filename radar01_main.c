@@ -151,8 +151,7 @@ void *http_worker(void *v_param)
              "data=[{\"x\":\"7788\",\"y\":\"5566\",\"value\":\"1818\"}] "
              "HTTP/1.0\r\n\r\n");
     char inbuf[1024] = {0};
-    int inbufsize = sizeof(inbuf);
-    while (1) {
+    while (!exit_i) {
         do {
             nevts = epoll_wait(winfo->epoll_fd, ev_recv, MAX_EVENTS, 5000);
         } while (!exit_i && nevts < 0 && errno == EINTR);
@@ -161,7 +160,8 @@ void *http_worker(void *v_param)
             for (int i = 0; i < CONCURRENCY; ++i)
                 close(hconn[i].sockfd);
             close(winfo->epoll_fd);
-            exit(0);
+            printf("Closing the epoll_fd and hconn.sockfd !!\n");
+            goto thread_exit;
         }
         int error = 0;
         socklen_t errlen = sizeof(error);
@@ -170,14 +170,14 @@ void *http_worker(void *v_param)
                            (void *) &error, &errlen) == 0) {
                 if (!error)
                     break;
-                fprintf(stderr, "error = %s\n", strerror(error));
+                fprintf(stderr, "[Warning] cause = %s\n", strerror(error));
                 nevts = 0;
-                http_connect_server(winfo->epoll_fd, hconn + i,
-                                    &winfo->hu.http_addr);
+                ret = http_connect_server(winfo->epoll_fd, hconn + i,
+                                          &winfo->hu.http_addr);
             }
-            if (!nevts)
-                continue;
         }
+        if (!nevts || ret < 0)
+            continue;
         for (int n = 0; n < nevts; ++n) {
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
