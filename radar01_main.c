@@ -157,10 +157,7 @@ void *http_worker(void *v_param)
     static struct radar01_share_msg_t http_share = {};
     char outbuf[1024] = {0};
     snprintf(outbuf, 1024, "GET /2020test/2020test?");
-    int outbufsize = strlen(outbuf);
-    snprintf(outbuf + outbufsize, 1024,
-             "data=[{\"x\":\"7788\",\"y\":\"5566\",\"value\":\"1818\"}] "
-             "HTTP/1.0\r\n\r\n");
+    int header_size = strlen(outbuf);
     char inbuf[1024] = {0};
     while (!exit_i) {
         do {
@@ -196,6 +193,12 @@ void *http_worker(void *v_param)
                 http_ring_dequeue(winfo->rbuf, (void *) &http_share,
                                   sizeof(http_share));
                 radar01_share_msg_dump("HTTP", &http_share);
+                snprintf(outbuf + header_size, 1024,
+                         "data=[{\"x\":\"%f\",\"y\":\"%f\",\"snr\":\"%d\","
+                         "\"noise\":\"%d\"}] "
+                         "HTTP/1.0\r\n\r\n",
+                         http_share.x_pos[0], http_share.y_pos[0],
+                         http_share.snr[0], http_share.noise[0]);
                 /* Send the http request */
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
