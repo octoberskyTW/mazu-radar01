@@ -1,7 +1,6 @@
 #include "radar01_tlv.h"
 #include "linux_common.h"
 #include "radar01_utils.h"
-#include "ringbuffer.h"
 #include "vender/mmw_output.h"
 
 int radar01_process_message(uint8_t *rx_buff,
@@ -60,6 +59,24 @@ void radar01_Cartesian_info_dump(struct radar01_message_data_t *data)
         printf("%u, obj_%u, %f, %f, %f, %f, %d, %d\n", data->frameNumber, i,
                points[i].x, points[i].y, points[i].z, points[i].velocity,
                side_info[i].snr, side_info[i].noise);
+    }
+}
+
+void radar01_construct_share_msg(struct radar01_message_data_t *data,
+                                 struct radar01_share_msg_t *share)
+{
+    DPIF_PointCloudSideInfo *side_info = &data->points_side_info[0];
+    DPIF_PointCloudCartesian *points = &data->points[0];
+
+    share->frameNumber = data->frameNumber;
+    share->numDetectedObj = data->numDetectedObj;
+    for (uint32_t i = 0; i < data->numDetectedObj; i++) {
+        share->x_pos[i] = points[i].x;
+        share->y_pos[i] = points[i].y;
+        share->z_pos[i] = points[i].z;
+        share->velocity[i] = points[i].velocity;
+        share->snr[i] = side_info[i].snr;
+        share->noise[i] = side_info[i].noise;
     }
 }
 

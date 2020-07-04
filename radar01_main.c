@@ -85,6 +85,7 @@ struct device_worker_info {
     int dss_fd;
     uint8_t data_buff[1024];
     struct radar01_message_data_t Cartesian;
+    struct ringbuffer_t *rbuf;
 };
 
 void *device_worker(void *v_param)
@@ -109,6 +110,10 @@ void *device_worker(void *v_param)
                     radar01_process_message(&winfo->data_buff[0], size,
                                             &winfo->Cartesian);
                     radar01_Cartesian_info_dump(&winfo->Cartesian);
+                    struct radar01_share_msg_t dss_share = {};
+                    radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
+                    dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
+                                     sizeof(dss_share));
                 }
 
             } else {
@@ -148,6 +153,7 @@ void *http_worker(void *v_param)
     /* Connect to same Host*/
     for (int i = 0; i < CONCURRENCY; ++i)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
+    static struct radar01_share_msg_t http_share = {};
     char outbuf[1024] = {0};
     snprintf(outbuf, 1024, "GET /2020test/2020test?");
     int outbufsize = strlen(outbuf);
@@ -185,7 +191,10 @@ void *http_worker(void *v_param)
         for (int n = 0; n < nevts; ++n) {
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
-                http_ring_dequeue(winfo->rbuf, NULL, 0);
+                /*Dequeue data from the dss first*/
+                http_ring_dequeue(winfo->rbuf, (void *) &http_share,
+                                  sizeof(http_share));
+                /* Send the http request */
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
 
@@ -243,14 +252,14 @@ int main(int argc, char const *argv[])
     dev_worker = calloc(1, sizeof(struct device_worker_info));
     if (!dev_worker)
         return -1;
+    dev_worker->rbuf = &dss2http_ring;
     rc = radar01_io_init("/dev/ttyACM1", (void *) &iwr1642_dss_blk);
     uint8_t is_device_worker_ready = 0;
     if (rc < 0) {
-        is_device_worker_ready = 0;
         printf("[Warning] Fail to radar01_io_init. skipped\n");
         iwr1642_dss_blk = NULL;
-        if (dev_worker)
-            free(dev_worker);
+        radar01_free_mem((void **) &dev_worker);
+        is_device_worker_ready = 0;
     } else {
         is_device_worker_ready = 1;
     }

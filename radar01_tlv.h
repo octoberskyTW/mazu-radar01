@@ -2,6 +2,8 @@
 #define __RADAR01_TLV_H__
 
 
+#include "radar01_share_msg.h"
+#include "ringbuffer.h"
 #include "vender/dpif_pointcloud.h"
 #include "vender/mmw_mss.h"
 #include "vender/mmw_output.h"
@@ -49,4 +51,7 @@ int radar01_process_message(uint8_t *rx_buff,
                             int pkt_length,
                             struct radar01_message_data_t *out_data);
 void radar01_Cartesian_info_dump(struct radar01_message_data_t *data);
+void radar01_construct_share_msg(struct radar01_message_data_t *data,
+                                 struct radar01_share_msg_t *share);
+int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size);
 #endif  //  __RADAR01_TLV_H__
