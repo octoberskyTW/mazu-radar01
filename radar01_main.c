@@ -11,7 +11,9 @@
 
 
 #define EPOLL_SIZE 256
+#define MAX_EVENTS 256
 #define BUF_SIZE 512
+#define CONCURRENCY 1
 #define EPOLL_RUN_TIMEOUT 1000
 
 #define MSG_HEADER_LENS (sizeof(MmwDemo_output_message_header))
@@ -24,7 +26,7 @@ static void server_err(const char *str)
 
 struct radar01_io_info_t *iwr1642_dss_blk;
 struct radar01_io_info_t *iwr1642_mss_blk;
-struct radar01_http_info_t *arstu_server_blk;
+struct radar01_http_user_t *arstu_server_blk;
 
 static int exit_i = 0;
 static void signal_exit(int signal)
@@ -121,43 +123,97 @@ void *device_worker(void *v_param)
 
 struct http_worker_info {
     int epoll_fd;
-    struct epoll_event ev_recv[EPOLL_SIZE];
-    int http_fd;
-    uint8_t data_buff[1024];
+    pthread_t tid;
+    struct radar01_http_user_t hu;
 };
 
 /* ToDo: Use epoll socket */
 void *http_worker(void *v_param)
 {
     struct http_worker_info *winfo;
+    struct epoll_event ev_recv[MAX_EVENTS];
+    struct radar01_http_conn_t hconn[CONCURRENCY], *ehc;
+    int nevts = 0;
+    int ret = 0;
     winfo = (struct http_worker_info *) v_param;
-    char buffer[1024] = {0};
-    int offset = 0;
-    snprintf(buffer, 1024, "GET /2020test/2020test?");
-    offset = strlen(buffer);
-    snprintf(buffer + offset, 1024,
+    if ((winfo->epoll_fd = epoll_create1(0)) < 0) {
+        printf("Fail to create epoll\n");
+        goto thread_exit;
+    }
+    /* Connect to same Host*/
+    for (int i = 0; i < CONCURRENCY; ++i)
+        http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
+
+    char outbuf[1024] = {0};
+    snprintf(outbuf, 1024, "GET /2020test/2020test?");
+    int outbufsize = strlen(outbuf);
+    snprintf(outbuf + outbufsize, 1024,
              "data=[{\"x\":\"7788\",\"y\":\"5566\",\"value\":\"1818\"}] "
              "HTTP/1.0\r\n\r\n");
+    char inbuf[1024] = {0};
+    int inbufsize = sizeof(inbuf);
+    while (1) {
+        do {
+            nevts = epoll_wait(winfo->epoll_fd, ev_recv, MAX_EVENTS, 5000);
+        } while (!exit_i && nevts < 0 && errno == EINTR);
 
-    printf("SENDING: %s", buffer);
-    printf("===\n");
+        if (exit_i != 0) {
+            for (int i = 0; i < CONCURRENCY; ++i)
+                close(hconn[i].sockfd);
+            close(winfo->epoll_fd);
+            exit(0);
+        }
+        int error = 0;
+        socklen_t errlen = sizeof(error);
+        for (int i = 0; i < CONCURRENCY; ++i) {
+            if (getsockopt(hconn[i].sockfd, SOL_SOCKET, SO_ERROR,
+                           (void *) &error, &errlen) == 0) {
+                if (!error)
+                    break;
+                fprintf(stderr, "error = %s\n", strerror(error));
+                nevts = 0;
+                http_connect_server(winfo->epoll_fd, hconn + i,
+                                    &winfo->hu.http_addr);
+            }
+            if (!nevts)
+                continue;
+        }
+        for (int n = 0; n < nevts; ++n) {
+            ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
+            if (ev_recv[n].events & EPOLLOUT) {
+                int ret =
+                    radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
 
-    // For this trivial demo just assume write() sends all bytes in one go and
-    // is not interrupted
+                if (ret > 0) {
+                    /* write done? schedule read */
+                    ev_recv[n].events = EPOLLIN;
+                    if (epoll_ctl(winfo->epoll_fd, EPOLL_CTL_MOD, ehc->sockfd,
+                                  ev_recv + n)) {
+                        perror("epoll_ctl");
+                        exit(1);
+                    }
 
-    write(winfo->http_fd, buffer, strlen(buffer));
+                } else {
+                    fprintf(stderr,
+                            "[%s:%d] Something Wrong at send http packet\n",
+                            __FUNCTION__, __LINE__);
+                }
 
-    int len = read(winfo->http_fd, &winfo->data_buff[0], 999);
-    winfo->data_buff[len] = '\0';
-    printf("%s\n", winfo->data_buff);
-    memset(winfo->data_buff, 0, 1024);
-    len = read(winfo->http_fd, &winfo->data_buff[0], 999);
-    winfo->data_buff[len] = '\0';
-    printf("%s\n", winfo->data_buff);
+            } else if (ev_recv[n].events & EPOLLIN) {
+                int len = radar01_http_recv(ehc->sockfd, inbuf, 1023);
+                if (len > 0) {
+                    inbuf[len] = '\0';
+                    printf("%s\n", inbuf);
+                    ev_recv[n].events = EPOLLOUT;
+                    epoll_ctl(winfo->epoll_fd, EPOLL_CTL_MOD, ehc->sockfd,
+                              ev_recv + n);
+                }
+            }
+        }  // recv event poll
+    }      // Thread main loop
+thread_exit:
     return NULL;
 }
-
-
 
 int main(int argc, char const *argv[])
 {
@@ -212,20 +268,20 @@ int main(int argc, char const *argv[])
         dev_worker->dss_fd = iwr1642_dss_blk->dss_fd;
     }
 
-    /* HTTP CLient Init*/
+    /* HTTP Client Init*/
     struct http_worker_info *http_winfo;
     http_winfo = calloc(1, sizeof(struct http_worker_info));
     uint8_t is_hp_worker_ready = 0;
     if (http_winfo) {
-        rc = radar01_http_socket_init("49.159.114.50:10002",
-                                      (void *) &arstu_server_blk);
+        rc = radar01_http_user_init("49.159.114.50:10002",
+                                    (void *) &http_winfo->hu);
         if (rc < 0)
             is_hp_worker_ready = 0;
         else {
-            http_winfo->http_fd = arstu_server_blk->client_fd;
             is_hp_worker_ready = 1;
         }
     }
+
     if (is_device_worker_ready)
         printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
 
@@ -254,7 +310,6 @@ int main(int argc, char const *argv[])
 
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
-    radar01_http_socket_deinit((void *) &arstu_server_blk);
+    // radar01_http_socket_deinit((void *) &arstu_server_blk);
     close(epoll_fd);
-    exit(0);
 }

@@ -1,7 +1,124 @@
 #include "radar01_http.h"
 #include <fcntl.h>
+#include <sys/epoll.h>
 #include "linux_common.h"
 
+int http_connect_server(int efd,
+                        struct radar01_http_conn_t *hc,
+                        struct sockaddr_in *http_addr)
+{
+    int rc = 0;
+    if ((hc->sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
+        printf("[%s:%d] Require socket failed. [ERROR]: %s\n", __FUNCTION__,
+               __LINE__, strerror(errno));
+        rc = -1;
+        goto failed_open_socket;
+    }
+    hc->offs = 0;
+    hc->flags = 0;
+    int retry_cnt = 0;
+    do {
+        rc = connect(hc->sockfd, (struct sockaddr *) http_addr,
+                     sizeof(struct sockaddr_in));
+        if (rc == 0)
+            break;
+        if (rc < 0 || errno == EAGAIN || errno == EINPROGRESS) {
+            retry_cnt++;
+            sleep(1);
+            fprintf(stderr, "[%s:%d] Connection retry %d errno: %s\n",
+                    __FUNCTION__, __LINE__, retry_cnt, strerror(errno));
+        }
+    } while (retry_cnt < 5);
+
+    if (rc && errno != EINPROGRESS) {
+        fprintf(stderr, "[%s:%d] Connect fail at socket(%d). [ERROR]: %s\n",
+                __FUNCTION__, __LINE__, hc->sockfd, strerror(errno));
+        rc = -1;
+        goto failed_connect;
+    }
+
+    struct epoll_event reg_evt = {
+        .events = EPOLLOUT,  // Send packet first;
+        .data.ptr = hc,
+    };
+
+    if ((rc = epoll_ctl(efd, EPOLL_CTL_ADD, hc->sockfd, &reg_evt)) < 0) {
+        printf("[%s:%d] Fail to control epoll. [ERROR]: %s\n", __FUNCTION__,
+               __LINE__, strerror(errno));
+        goto failed_connect;
+    }
+    printf("Connect success !! \n");
+    return rc;
+failed_connect:
+    close(hc->sockfd);
+failed_open_socket:
+    return rc;
+}
+
+
+
+int radar01_http_user_init(char *ifname, void *priv_data)
+{
+    int rc = 0;
+    struct radar01_http_user_t *hu = (struct radar01_http_user_t *) priv_data;
+    /*Get address and port from strings "192.168.1.1:7788"*/
+    strncpy(&hu->sever_url[0], ifname, 256);
+    char *saveptr = NULL;
+    char delim = ':';
+    char *token = strtok_r(&hu->sever_url[0], &delim, &saveptr);
+    hu->http_addr.sin_family = AF_INET;
+    hu->http_addr.sin_addr.s_addr = inet_addr(token);
+    token = strtok_r(NULL, &delim, &saveptr);
+    if (token)
+        hu->net_port = atoi(token);
+    hu->http_addr.sin_port = htons(hu->net_port);
+    printf("%s:%d\n", hu->sever_url, hu->net_port);
+    return rc;
+}
+
+int radar01_http_send(int fd, char *tx_buff, int frame_len)
+{
+    int offset = 0;
+    while (offset < frame_len) {
+        int wdlen;
+        if ((wdlen = send(fd, tx_buff + offset, frame_len - offset, 0)) < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+                wdlen = 0;
+            } else {
+                fprintf(stderr, "%s: %s\n", __FUNCTION__, strerror(errno));
+                return -1;
+            }
+        }
+        offset += wdlen;
+    }
+    return offset;
+}
+/* Not work , it would block*/
+int radar01_http_recv(int fd, char *rx_buff, int buff_size)
+{
+    int offset = 0;
+    memset(rx_buff, 0, buff_size);
+    while (offset < buff_size) {
+        int rdlen = 0;
+        if ((rdlen = recv(fd, rx_buff + offset, buff_size - offset,
+                          MSG_DONTWAIT)) < 0) {
+            if (rdlen == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                rdlen = 0;
+                break;
+            } else {
+                printf("[%s:%d] rdlen = %d, %s\n", __func__, __LINE__, rdlen,
+                       strerror(errno));
+                break;
+            }
+        } else if (rdlen == 0) {
+            /* socket peer has performed an orderly shutdown */
+            break;
+        }
+        offset += rdlen;
+    }
+    return offset;
+}
+#if 0
 int radar01_http_socket_init(char *ifname, void **priv_data)
 {
     int rc = 0;
@@ -81,3 +198,4 @@ int radar01_http_socket_deinit(void **priv_data)
         *priv_data = NULL;
     }
 }
+#endif
