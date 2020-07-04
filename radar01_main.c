@@ -112,6 +112,7 @@ void *device_worker(void *v_param)
                     radar01_Cartesian_info_dump(&winfo->Cartesian);
                     struct radar01_share_msg_t dss_share = {};
                     radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
+                    radar01_share_msg_dump("Device", &dss_share);
                     dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
                                      sizeof(dss_share));
                 }
@@ -194,6 +195,7 @@ void *http_worker(void *v_param)
                 /*Dequeue data from the dss first*/
                 http_ring_dequeue(winfo->rbuf, (void *) &http_share,
                                   sizeof(http_share));
+                radar01_share_msg_dump("HTTP", &http_share);
                 /* Send the http request */
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));

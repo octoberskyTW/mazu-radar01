@@ -52,6 +52,8 @@ int radar01_process_message(uint8_t *rx_buff,
 
 void radar01_Cartesian_info_dump(struct radar01_message_data_t *data)
 {
+    if (RADAR01_CSV_DEBUG_ENABLE == 0)
+        return;
     DPIF_PointCloudSideInfo *side_info = &data->points_side_info[0];
     DPIF_PointCloudCartesian *points = &data->points[0];
 

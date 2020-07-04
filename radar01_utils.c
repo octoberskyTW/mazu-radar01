@@ -20,6 +20,19 @@ void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen)
     debug_print("\n\r");
 }
 
+void radar01_share_msg_dump(char *title, struct radar01_share_msg_t *share)
+{
+    if (RADAR01_SHARE_MSG_DEBUG_ENABLE == 0)
+        return;
+    printf("%s:%p, Frame: %u, DetectedObjs = %u\n\r", title, share,
+           share->frameNumber, share->numDetectedObj);
+    for (uint32_t i = 0; i < share->numDetectedObj; i++) {
+        printf("%u, obj_%u, %f, %f, %f, %f, %d, %d\n", share->frameNumber, i,
+               share->x_pos[i], share->y_pos[i], share->z_pos[i],
+               share->velocity[i], share->snr[i], share->noise[i]);
+    }
+}
+
 static struct timespec g_timestamp;
 void clock_get_hw_time(struct timespec *ts)
 {
