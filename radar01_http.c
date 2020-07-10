@@ -4,6 +4,10 @@
 #include "linux_common.h"
 #include "radar01_utils.h"
 
+#define CR '\r'
+#define LF '\n'
+#define CRLFCRLF "\r\n\r\n"
+
 int http_connect_server(int efd,
                         struct radar01_http_conn_t *hc,
                         struct sockaddr_in *http_addr)
@@ -134,6 +138,22 @@ int http_ring_dequeue(struct ringbuffer_t *rbuf, void *payload, uint32_t size)
 empty:
     return 0;
 }
+
+// int create_http_request_packet()
+// {
+//     uint8_t *rxcell = NULL;
+//     rb_pop(rbuf, (void **) &rxcell);
+//     if (rxcell == NULL)
+//         goto empty;
+//     memcpy(payload, rxcell, size);
+//     radar01_free_mem((void **) &rxcell);
+//     debug_hex_dump("http_ring_dequeue", payload, size);
+//     return size;
+// empty:
+//     return 0;
+// }
+
+
 #if 0
 int radar01_http_socket_init(char *ifname, void **priv_data)
 {

@@ -156,7 +156,7 @@ void *http_worker(void *v_param)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
     static struct radar01_share_msg_t http_share = {};
     char outbuf[1024] = {0};
-    snprintf(outbuf, 1024, "GET /2020test/2020test?");
+    snprintf(outbuf, 1024, "POST /2020test/2020test?");
     int header_size = strlen(outbuf);
     char inbuf[1024] = {0};
     while (!exit_i) {
@@ -196,7 +196,8 @@ void *http_worker(void *v_param)
                 snprintf(outbuf + header_size, 1024,
                          "data=[{\"x\":\"%f\",\"y\":\"%f\",\"snr\":\"%d\","
                          "\"noise\":\"%d\"}] "
-                         "HTTP/1.0\r\n\r\n",
+                         "HTTP/1.1\r\nHost: 49.159.114.50\r\nConnection:"
+                         "Keep-Alive\r\n\r\n",
                          http_share.x_pos[0], http_share.y_pos[0],
                          http_share.snr[0], http_share.noise[0]);
                 /* Send the http request */
@@ -295,7 +296,7 @@ int main(int argc, char const *argv[])
     http_winfo = calloc(1, sizeof(struct http_worker_info));
     uint8_t is_hp_worker_ready = 0;
     if (http_winfo) {
-        rc = radar01_http_user_init("49.159.114.50:10002",
+        rc = radar01_http_user_init("49.159.114.50:10003",
                                     (void *) &http_winfo->hu);
         if (rc < 0)
             is_hp_worker_ready = 0;
