@@ -16,6 +16,7 @@
 #define BUF_SIZE 512
 #define CONCURRENCY 1
 #define EPOLL_RUN_TIMEOUT 1000
+#define RINGBUFF_SIZE 4
 
 #define MSG_HEADER_LENS (sizeof(MmwDemo_output_message_header))
 
@@ -210,6 +211,7 @@ void *http_worker(void *v_param)
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
                 /*Dequeue data from the dss first*/
+                memset(&http_share, 0, sizeof(struct radar01_share_msg_t));
                 http_ring_dequeue(winfo->rbuf, (void *) &http_share,
                                   sizeof(http_share));
                 radar01_share_msg_dump("HTTP", &http_share);
@@ -271,7 +273,7 @@ int main(int argc, char const *argv[])
     }
 
     /* Init ringbuffer first */
-    rb_init(&dss2http_ring, 256);
+    rb_init(&dss2http_ring, RINGBUFF_SIZE);
     /* code */
     struct device_worker_info *dev_worker;
     dev_worker = calloc(1, sizeof(struct device_worker_info));
