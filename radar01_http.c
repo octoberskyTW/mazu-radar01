@@ -4,9 +4,7 @@
 #include "linux_common.h"
 #include "radar01_utils.h"
 
-#define CR '\r'
-#define LF '\n'
-#define CRLFCRLF "\r\n\r\n"
+#define CRLF "\r\n"
 
 int http_connect_server(int efd,
                         struct radar01_http_conn_t *hc,
@@ -67,17 +65,17 @@ int radar01_http_user_init(char *ifname, void *priv_data)
     int rc = 0;
     struct radar01_http_user_t *hu = (struct radar01_http_user_t *) priv_data;
     /*Get address and port from strings "192.168.1.1:7788"*/
-    strncpy(&hu->sever_url[0], ifname, 256);
+    strncpy(&hu->server_url[0], ifname, 256);
     char *saveptr = NULL;
     char delim = ':';
-    char *token = strtok_r(&hu->sever_url[0], &delim, &saveptr);
+    char *token = strtok_r(&hu->server_url[0], &delim, &saveptr);
     hu->http_addr.sin_family = AF_INET;
     hu->http_addr.sin_addr.s_addr = inet_addr(token);
     token = strtok_r(NULL, &delim, &saveptr);
     if (token)
         hu->net_port = atoi(token);
     hu->http_addr.sin_port = htons(hu->net_port);
-    printf("%s:%d\n", hu->sever_url, hu->net_port);
+    printf("%s:%d\n", hu->server_url, hu->net_port);
     return rc;
 }
 
@@ -139,19 +137,30 @@ empty:
     return 0;
 }
 
-// int create_http_request_packet()
-// {
-//     uint8_t *rxcell = NULL;
-//     rb_pop(rbuf, (void **) &rxcell);
-//     if (rxcell == NULL)
-//         goto empty;
-//     memcpy(payload, rxcell, size);
-//     radar01_free_mem((void **) &rxcell);
-//     debug_hex_dump("http_ring_dequeue", payload, size);
-//     return size;
-// empty:
-//     return 0;
-// }
+int create_http_request_msg(char *target,
+                            char *msg,
+                            char *host,
+                            char *request,
+                            size_t size)
+{
+    /* Construct request line */
+    int offset = 0;
+    snprintf(request, size, "POST %s?%s", target, msg);
+    offset = strlen(request);
+
+    snprintf(request + offset, size - offset, "HTTP/1.1\r\n");
+    offset = strlen(request);
+    /* Construnt Header */
+    snprintf(request + offset, size - offset, "Host: %s\r\n", host);
+    offset = strlen(request);
+    snprintf(request + offset, size - offset, "Connection: Keep-Alive\r\n");
+    offset = strlen(request);
+    snprintf(request + offset, size - offset, "Content-Length: 0\r\n");
+    offset = strlen(request);
+    snprintf(request + offset, size - offset, "%s", CRLF);
+    offset = strlen(request);
+    return offset;
+}
 
 
 #if 0
@@ -175,10 +184,10 @@ int radar01_http_socket_init(char *ifname, void **priv_data)
         goto failed_open_socket;
     }
     /*Get address and port from strings "192.168.1.1:7788"*/
-    strncpy(&hp->sever_url[0], ifname, 256);
+    strncpy(&hp->server_url[0], ifname, 256);
     char *saveptr = NULL;
     char delim = ':';
-    char *token = strtok_r(&hp->sever_url[0], &delim, &saveptr);
+    char *token = strtok_r(&hp->server_url[0], &delim, &saveptr);
     hp->http_addr.sin_family = AF_INET;
     hp->http_addr.sin_addr.s_addr = inet_addr(token);
     token = strtok_r(NULL, &delim, &saveptr);
@@ -206,7 +215,7 @@ int radar01_http_socket_init(char *ifname, void **priv_data)
 
     if (rc < 0) {
         printf("[%s:%d] Connect to %s:%d failed. Abort http init. errno: %s\n",
-               __FUNCTION__, __LINE__, hp->sever_url, hp->net_port,
+               __FUNCTION__, __LINE__, hp->server_url, hp->net_port,
                strerror(errno));
         goto failed_connect;
     }
@@ -229,7 +238,7 @@ int radar01_http_socket_deinit(void **priv_data)
     struct radar01_http_info_t *hp = *priv_data;
     if (hp) {
         close(hp->client_fd);
-        printf("Closing %s:%d \n", hp->sever_url, hp->net_port);
+        printf("Closing %s:%d \n", hp->server_url, hp->net_port);
         free(hp);
         *priv_data = NULL;
     }

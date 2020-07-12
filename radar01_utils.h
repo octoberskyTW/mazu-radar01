@@ -6,6 +6,7 @@
 #define RADAR01_DEBUG_ENABLE 0
 #define RADAR01_SHARE_MSG_DEBUG_ENABLE 0
 #define RADAR01_CSV_DEBUG_ENABLE 0
+#define RADAR01_HTTP_DEBUG_ENABLE 0
 #define TRUE 1
 #define FALSE 0
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))

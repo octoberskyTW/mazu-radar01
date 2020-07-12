@@ -25,6 +25,8 @@ static void server_err(const char *str)
     exit(-1);
 }
 
+static char target[] = "/2020test/2020test";
+static char host_port[] = "49.159.114.50:10003";
 struct radar01_io_info_t *iwr1642_dss_blk;
 struct radar01_io_info_t *iwr1642_mss_blk;
 struct radar01_http_user_t *arstu_server_blk;
@@ -136,6 +138,25 @@ struct http_worker_info {
     struct ringbuffer_t *rbuf;
 };
 
+int construct_upload_data(struct radar01_share_msg_t *in,
+                          char *out,
+                          size_t size)
+{
+    int offset = 0;
+    memset(out, 0, size);
+    snprintf(out, size, "data=[");
+    offset = strlen(out);
+    for (uint32_t i = 0; i < in->numDetectedObj; i++) {
+        snprintf(out + offset, size - offset,
+                 "{\"obj\":\"%u\",\"x\":\"%f\",\"y\":\"%f\",\"snr\":\"%d\","
+                 "\"noise\":\"%d\"},",
+                 i, in->x_pos[i], in->y_pos[i], in->snr[i], in->noise[i]);
+        offset = strlen(out);
+    }
+    snprintf(out + offset - 1, size, "] ");
+    offset = strlen(out);
+    return offset;
+}
 /* ToDo: Use epoll socket */
 void *http_worker(void *v_param)
 {
@@ -155,9 +176,8 @@ void *http_worker(void *v_param)
     for (int i = 0; i < CONCURRENCY; ++i)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
     static struct radar01_share_msg_t http_share = {};
-    char outbuf[1024] = {0};
-    snprintf(outbuf, 1024, "POST /2020test/2020test?");
-    int header_size = strlen(outbuf);
+    char outbuf[2048] = {0};
+    char msg[1024] = {0};
     char inbuf[1024] = {0};
     while (!exit_i) {
         do {
@@ -193,13 +213,11 @@ void *http_worker(void *v_param)
                 http_ring_dequeue(winfo->rbuf, (void *) &http_share,
                                   sizeof(http_share));
                 radar01_share_msg_dump("HTTP", &http_share);
-                snprintf(outbuf + header_size, 1024,
-                         "data=[{\"x\":\"%f\",\"y\":\"%f\",\"snr\":\"%d\","
-                         "\"noise\":\"%d\"}] "
-                         "HTTP/1.1\r\nHost: 49.159.114.50\r\nConnection:"
-                         "Keep-Alive\r\n\r\n",
-                         http_share.x_pos[0], http_share.y_pos[0],
-                         http_share.snr[0], http_share.noise[0]);
+                construct_upload_data(&http_share, msg, 1024);
+                int size = create_http_request_msg(
+                    target, msg, &(winfo->hu.server_url[0]), outbuf, 2048);
+                if (RADAR01_HTTP_DEBUG_ENABLE == 1)
+                    printf("Total request length: %d\n%s\n", size, outbuf);
                 /* Send the http request */
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
@@ -223,7 +241,8 @@ void *http_worker(void *v_param)
                 int len = radar01_http_recv(ehc->sockfd, inbuf, 1023);
                 if (len > 0) {
                     inbuf[len] = '\0';
-                    printf("%s\n", inbuf);
+                    if (RADAR01_HTTP_DEBUG_ENABLE == 1)
+                        printf("%s\n", inbuf);
                     ev_recv[n].events = EPOLLOUT;
                     epoll_ctl(winfo->epoll_fd, EPOLL_CTL_MOD, ehc->sockfd,
                               ev_recv + n);
@@ -296,8 +315,7 @@ int main(int argc, char const *argv[])
     http_winfo = calloc(1, sizeof(struct http_worker_info));
     uint8_t is_hp_worker_ready = 0;
     if (http_winfo) {
-        rc = radar01_http_user_init("49.159.114.50:10003",
-                                    (void *) &http_winfo->hu);
+        rc = radar01_http_user_init(host_port, (void *) &http_winfo->hu);
         if (rc < 0)
             is_hp_worker_ready = 0;
         else {
