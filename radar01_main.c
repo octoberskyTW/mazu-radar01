@@ -253,6 +253,8 @@ void *http_worker(void *v_param)
         }  // recv event poll
     }      // Thread main loop
 thread_exit:
+    for (int i = 0; i < CONCURRENCY; ++i)
+        shutdown(hconn[i].sockfd, SHUT_WR);
     return NULL;
 }
 
