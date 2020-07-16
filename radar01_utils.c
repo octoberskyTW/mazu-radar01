@@ -7,17 +7,17 @@ void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen)
     uint8_t *pt;
     int x;
     pt = pSrcBufVA;
-    debug_print("%s: %p, len = %d\n\r", str, pSrcBufVA, SrcBufLen);
+    debug_print("%s: %p, len = %d\n", str, pSrcBufVA, SrcBufLen);
     for (x = 0; x < SrcBufLen; x++) {
         if (x % 16 == 0) {
             debug_print("0x%04x : ", x);
         }
         debug_print("%02x ", ((uint8_t) pt[x]));
         if (x % 16 == 15) {
-            debug_print("\n\r");
+            debug_print("\n");
         }
     }
-    debug_print("\n\r");
+    debug_print("\n");
 }
 
 void radar01_share_msg_dump(char *title, struct radar01_share_msg_t *share)
