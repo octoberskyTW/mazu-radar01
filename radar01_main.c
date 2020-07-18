@@ -87,7 +87,8 @@ struct device_worker_info {
     struct epoll_event ev_recv[EPOLL_SIZE];
     int dss_fd;
     uint8_t data_buff[1024];
-    struct radar01_message_data_t Cartesian;
+    int (*process_msg_func_)(uint8_t *, int, void *);
+    struct radar01_pointcloud_data_t Cartesian;
     struct ringbuffer_t *rbuf;
 };
 
@@ -113,7 +114,7 @@ void *device_worker(void *v_param)
                     radar01_process_message(&winfo->data_buff[0], size,
                                             &winfo->Cartesian);
                     radar01_Cartesian_info_dump(&winfo->Cartesian);
-                    struct radar01_share_msg_t dss_share = {};
+                    struct radar01_ringbuf_entry_t dss_share = {};
                     radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
                     radar01_share_msg_dump("Device", &dss_share);
                     dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
@@ -139,7 +140,7 @@ struct http_worker_info {
     struct ringbuffer_t *rbuf;
 };
 
-int construct_upload_data(struct radar01_share_msg_t *in,
+int construct_upload_data(struct radar01_ringbuf_entry_t *in,
                           char *out,
                           size_t size)
 {
@@ -176,7 +177,7 @@ void *http_worker(void *v_param)
     /* Connect to same Host*/
     for (int i = 0; i < CONCURRENCY; ++i)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
-    static struct radar01_share_msg_t http_share = {};
+    static struct radar01_ringbuf_entry_t http_share = {};
     char outbuf[2048] = {0};
     char msg[1024] = {0};
     char inbuf[1024] = {0};
@@ -211,7 +212,7 @@ void *http_worker(void *v_param)
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
                 /*Dequeue data from the dss first*/
-                memset(&http_share, 0, sizeof(struct radar01_share_msg_t));
+                memset(&http_share, 0, sizeof(struct radar01_ringbuf_entry_t));
                 http_ring_dequeue(winfo->rbuf, (void *) &http_share,
                                   sizeof(http_share));
                 radar01_share_msg_dump("HTTP", &http_share);

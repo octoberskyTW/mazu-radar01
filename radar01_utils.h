@@ -31,5 +31,5 @@
 void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen);
 void *radar01_alloc_mem(size_t size);
 void radar01_free_mem(void **ptr);
-void radar01_share_msg_dump(char *title, struct radar01_share_msg_t *share);
+void radar01_share_msg_dump(char *title, struct radar01_ringbuf_entry_t *share);
 #endif  // __RADAR01_UTILS_H__

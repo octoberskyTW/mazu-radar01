@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct radar01_share_msg_t {
+struct radar01_ringbuf_entry_t {
     uint32_t frameNumber;
     uint32_t numDetectedObj;
     float x_pos[32];

@@ -9,7 +9,7 @@
 #include "vender/mmw_output.h"
 #define MAXIMUM_OBJS 32
 
-struct radar01_message_data_t {
+struct radar01_pointcloud_data_t {
     uint32_t frameNumber;
     uint32_t numDetectedObj;
     /* MMWDEMO_OUTPUT_MSG_DETECTED_POINTS = 1 */
@@ -49,9 +49,9 @@ struct radar01_message_data_t {
 
 int radar01_process_message(uint8_t *rx_buff,
                             int pkt_length,
-                            struct radar01_message_data_t *out_data);
-void radar01_Cartesian_info_dump(struct radar01_message_data_t *data);
-void radar01_construct_share_msg(struct radar01_message_data_t *data,
-                                 struct radar01_share_msg_t *share);
+                            struct radar01_pointcloud_data_t *out_data);
+void radar01_Cartesian_info_dump(struct radar01_pointcloud_data_t *data);
+void radar01_construct_share_msg(struct radar01_pointcloud_data_t *data,
+                                 struct radar01_ringbuf_entry_t *share);
 int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size);
 #endif  //  __RADAR01_TLV_H__

@@ -5,13 +5,13 @@
 
 int radar01_process_message(uint8_t *rx_buff,
                             int pkt_length,
-                            struct radar01_message_data_t *out_data)
+                            struct radar01_pointcloud_data_t *out_data)
 {
     /* Start to process TLV IEs */
     uint8_t *pData = rx_buff;
     uint32_t tlv = 1;
     MmwDemo_output_message_header msgh = {0};
-    memset((uint8_t *) out_data, 0, sizeof(struct radar01_message_data_t));
+    memset((uint8_t *) out_data, 0, sizeof(struct radar01_pointcloud_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
     // if(RADAR01_DEBUG_ENABLE)
     printf("Frame %u: Detected %u objs: numTLVs=%u\n", msgh.frameNumber,
@@ -50,7 +50,7 @@ int radar01_process_message(uint8_t *rx_buff,
     return 0;
 }
 
-void radar01_Cartesian_info_dump(struct radar01_message_data_t *data)
+void radar01_Cartesian_info_dump(struct radar01_pointcloud_data_t *data)
 {
     if (RADAR01_CSV_DEBUG_ENABLE == 0)
         return;
@@ -64,8 +64,8 @@ void radar01_Cartesian_info_dump(struct radar01_message_data_t *data)
     }
 }
 
-void radar01_construct_share_msg(struct radar01_message_data_t *data,
-                                 struct radar01_share_msg_t *share)
+void radar01_construct_share_msg(struct radar01_pointcloud_data_t *data,
+                                 struct radar01_ringbuf_entry_t *share)
 {
     DPIF_PointCloudSideInfo *side_info = &data->points_side_info[0];
     DPIF_PointCloudCartesian *points = &data->points[0];

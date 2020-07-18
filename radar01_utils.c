@@ -20,7 +20,7 @@ void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen)
     debug_print("\n");
 }
 
-void radar01_share_msg_dump(char *title, struct radar01_share_msg_t *share)
+void radar01_share_msg_dump(char *title, struct radar01_ringbuf_entry_t *share)
 {
     if (RADAR01_SHARE_MSG_DEBUG_ENABLE == 0)
         return;
