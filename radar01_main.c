@@ -89,6 +89,7 @@ struct device_worker_info {
     int dss_fd;
     uint8_t data_buff[1024];
     int (*process_msg_func_)(uint8_t *, int, void *);
+    void (*data_dumper_func_)(void *);
     struct radar01_pointcloud_data_t Cartesian;
     struct ringbuffer_t *rbuf;
 };
@@ -114,7 +115,7 @@ void *device_worker(void *v_param)
                 if (size > 0) {
                     winfo->process_msg_func_(&winfo->data_buff[0], size,
                                              &winfo->Cartesian);
-                    radar01_Cartesian_info_dump(&winfo->Cartesian);
+                    winfo->data_dumper_func_(&winfo->Cartesian);
                     struct radar01_ringbuf_entry_t dss_share = {};
                     radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
                     radar01_share_msg_dump("Device", &dss_share);
@@ -338,6 +339,7 @@ int main(int argc, char const *argv[])
 
     dev_worker->rbuf = &dss2http_ring;
     dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
+    dev_worker->data_dumper_func_ = pointcloud_Cartesian_info_dump;
     if (arg_radar_dev == NULL) {
         static char devf[] = "/dev/ttyACM1";
         arg_radar_dev = devf;

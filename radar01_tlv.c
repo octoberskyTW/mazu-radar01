@@ -50,8 +50,10 @@ int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
     return 0;
 }
 
-void radar01_Cartesian_info_dump(struct radar01_pointcloud_data_t *data)
+void pointcloud_Cartesian_info_dump(void *datain)
 {
+    struct radar01_pointcloud_data_t *data =
+        (struct radar01_pointcloud_data_t *) datain;
     if (RADAR01_CSV_DEBUG_ENABLE == 0)
         return;
     DPIF_PointCloudSideInfo *side_info = &data->points_side_info[0];
