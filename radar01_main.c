@@ -1,3 +1,4 @@
+#include <getopt.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -111,8 +112,8 @@ void *device_worker(void *v_param)
                     winfo->dss_fd, &winfo->data_buff[0], 1024, winfo->epoll_fd,
                     &winfo->ev_recv[0]);
                 if (size > 0) {
-                    radar01_process_message(&winfo->data_buff[0], size,
-                                            &winfo->Cartesian);
+                    winfo->process_msg_func_(&winfo->data_buff[0], size,
+                                             &winfo->Cartesian);
                     radar01_Cartesian_info_dump(&winfo->Cartesian);
                     struct radar01_ringbuf_entry_t dss_share = {};
                     radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
@@ -259,9 +260,61 @@ thread_exit:
     return NULL;
 }
 
+static const char short_options[] = "d:vp";
+
+static const struct option long_options[] = {{"help", 0, NULL, '%'},
+                                             {"vitalsign", 0, NULL, 'v'},
+                                             {"pointclout", 0, NULL, 'p'},
+                                             {"device", 1, NULL, 'd'},
+                                             {NULL, 0, NULL, 0}};
+
+static void print_usage()
+{
+    printf(
+        "Usage: radar01 [options] [http://]hostname[:port]/path\n"
+        "Options:\n"
+        "   -v, --vitalsign     firmware type: vitalsign\n"
+        "   -p, --pointclouud   firmware type: pointclouud\n"
+        "   -d, --device       radar char device file\n"
+        "   --help             display this message\n");
+    exit(0);
+}
+
+enum { POINTCLOUD_E = 0, VITALSIGN_E };
+
 int main(int argc, char const *argv[])
 {
     int rc = 0;
+    /* Argument options */
+    int next_option;
+    char *arg_radar_dev = NULL;
+    int found_pointcloud = 0;
+    int found_vitalsign = 0;
+    if (argc == 1)
+        print_usage();
+    do {
+        next_option = getopt_long(argc, (char **) argv, short_options,
+                                  long_options, NULL);
+        switch (next_option) {
+        case '%':
+            print_usage();
+            break;
+        case 'd':
+            arg_radar_dev = optarg;
+            break;
+        case 'p':
+            found_pointcloud++;
+            break;
+        case 'v':
+            found_vitalsign++;
+            break;
+        case -1:
+            break;
+        default:
+            printf("Unexpected argument: '%c'\n", next_option);
+            return 1;
+        }
+    } while (next_option != -1);
     /*Signal Handleer*/
     __sighandler_t ret = signal(SIGINT, signal_exit);
     if (ret == SIG_ERR) {
@@ -282,8 +335,15 @@ int main(int argc, char const *argv[])
     dev_worker = calloc(1, sizeof(struct device_worker_info));
     if (!dev_worker)
         return -1;
+
     dev_worker->rbuf = &dss2http_ring;
-    rc = radar01_io_init("/dev/ttyACM1", (void *) &iwr1642_dss_blk);
+    dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
+    if (arg_radar_dev == NULL) {
+        static char devf[] = "/dev/ttyACM1";
+        arg_radar_dev = devf;
+    }
+
+    rc = radar01_io_init(arg_radar_dev, (void *) &iwr1642_dss_blk);
     uint8_t is_device_worker_ready = 0;
     if (rc < 0) {
         printf("[Warning] Fail to radar01_io_init. skipped\n");

@@ -3,13 +3,13 @@
 #include "radar01_utils.h"
 #include "vender/mmw_output.h"
 
-int radar01_process_message(uint8_t *rx_buff,
-                            int pkt_length,
-                            struct radar01_pointcloud_data_t *out_data)
+int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
 {
     /* Start to process TLV IEs */
     uint8_t *pData = rx_buff;
     uint32_t tlv = 1;
+    struct radar01_pointcloud_data_t *out_data =
+        (struct radar01_pointcloud_data_t *) out;
     MmwDemo_output_message_header msgh = {0};
     memset((uint8_t *) out_data, 0, sizeof(struct radar01_pointcloud_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));

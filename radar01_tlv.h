@@ -47,9 +47,7 @@ struct radar01_pointcloud_data_t {
 };
 
 
-int radar01_process_message(uint8_t *rx_buff,
-                            int pkt_length,
-                            struct radar01_pointcloud_data_t *out_data);
+int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out);
 void radar01_Cartesian_info_dump(struct radar01_pointcloud_data_t *data);
 void radar01_construct_share_msg(struct radar01_pointcloud_data_t *data,
                                  struct radar01_ringbuf_entry_t *share);
