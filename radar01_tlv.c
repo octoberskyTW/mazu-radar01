@@ -50,6 +50,51 @@ int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
     return 0;
 }
 
+int process_vitalsign_msg(uint8_t *rx_buff, int pkt_length, void *out)
+{
+    /* Start to process TLV IEs */
+    uint8_t *pData = rx_buff;
+    uint32_t tlv = 1;
+    struct radar01_vitalsign_data_t *obj =
+        (struct radar01_vitalsign_data_t *) out;
+    MmwDemo_output_message_header msgh = {0};
+    memset((uint8_t *) obj, 0, sizeof(struct radar01_vitalsign_data_t));
+    memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
+    if (RADAR01_FRAME_PRINT == 1)
+        printf("# Frame %u: Stamp %u: Detected %u objs: TLVs=%u\n",
+               msgh.frameNumber, msgh.timeCpuCycles, msgh.numDetectedObj,
+               msgh.numTLVs);
+    obj->frameNumber = msgh.frameNumber;
+    obj->numDetectedObj = msgh.numDetectedObj;
+    pData += sizeof(MmwDemo_output_message_header);
+    pkt_length -= sizeof(MmwDemo_output_message_header);
+    while (tlv < msgh.numTLVs && pkt_length > 0) {
+        MmwDemo_output_message_tl tlv_recv;
+        memcpy((uint8_t *) &tlv_recv, pData, sizeof(MmwDemo_output_message_tl));
+        pData += sizeof(MmwDemo_output_message_tl);
+        pkt_length -= sizeof(MmwDemo_output_message_tl);
+
+        switch (tlv_recv.type) {
+        case VITALSIGN_OUTPUT_MSG_STATS:
+            memcpy((void *) &(obj->stats), pData,
+                   sizeof(VitalSignsDemo_OutputStats));
+            obj->numRangeBinProcessed =
+                obj->stats.rangeBinEndIndex - obj->stats.rangeBinStartIndex + 1;
+            break;
+        case VITALSIGN_OUTPUT_MSG_RANGE_PROFILE:
+            memcpy((void *) &(obj->ptrMatrix), pData,
+                   obj->numRangeBinProcessed * 4);
+            break;
+        default:
+            break;
+        }
+        pData += tlv_recv.length;
+        pkt_length -= tlv_recv.length;
+        tlv++;
+    }
+    return 0;
+}
+
 void pointcloud_Cartesian_info_dump(void *datain)
 {
     struct radar01_pointcloud_data_t *data =
@@ -64,6 +109,17 @@ void pointcloud_Cartesian_info_dump(void *datain)
                points[i].x, points[i].y, points[i].z, points[i].velocity,
                side_info[i].snr, side_info[i].noise);
     }
+}
+
+void vitalsign_stats_dump(void *datain)
+{
+    struct radar01_vitalsign_data_t *data =
+        (struct radar01_vitalsign_data_t *) datain;
+    if (RADAR01_CSV_DEBUG_ENABLE == 0)
+        return;
+    VitalSignsDemo_OutputStats *stats = &data->stats;
+    printf("%u, %f, %f, %f\n", data->frameNumber, stats->breathingRateEst_FFT,
+           stats->breathingRateEst_xCorr, stats->breathingRateEst_peakCount);
 }
 
 void pointcloud_create_json_msg(void *datain,
@@ -115,6 +171,48 @@ void pointcloud_create_json_msg(void *datain,
                json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
     for (uint32_t i = 0; i < pdata->numDetectedObj; i++)
         json_object_put(jobj[i]);
+    json_object_put(jarr);
+}
+
+void vitalsign_create_json_msg(void *datain,
+                               struct radar01_json_entry_t *share,
+                               size_t sz_limit)
+{
+    struct radar01_vitalsign_data_t *pdata =
+        (struct radar01_vitalsign_data_t *) datain;
+    VitalSignsDemo_OutputStats *stats = &pdata->stats;
+
+    json_object *jarr;
+    json_object *jobj;
+    jarr = json_object_new_array();
+
+    char val_str[128] = {0};
+    jobj = json_object_new_object();
+    json_object_object_add(jobj, "frm_seq",
+                           json_object_new_int(pdata->frameNumber));
+
+    snprintf(val_str, 128, "%8.6f", stats->breathingRateEst_FFT);
+    json_object_object_add(jobj, "breathingRateEst_FFT",
+                           json_object_new_string(val_str));
+    snprintf(val_str, 128, "%8.6f", stats->breathingRateEst_xCorr);
+    json_object_object_add(jobj, "breathingRateEst_xCorr",
+                           json_object_new_string(val_str));
+    snprintf(val_str, 128, "%8.6f", stats->breathingRateEst_peakCount);
+    json_object_object_add(jobj, "breathingRateEst_peakCount",
+                           json_object_new_string(val_str));
+
+    json_object_array_add(jarr, jobj);
+
+    snprintf(share->payload, sz_limit, "data=%s",
+             json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
+    share->length = strlen(share->payload);
+    if (share->length > (int) sz_limit)
+        printf("[WARNING] JSON Size overflow %d, expect: %d\n", share->length,
+               (int) sz_limit);
+    if (RADAR01_JSON_MSG_DEBUG_ENABLE == 1)
+        printf("JSON Raw data Length:%d, data=%s\n", share->length,
+               json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
+    json_object_put(jobj);
     json_object_put(jarr);
 }
 

@@ -27,7 +27,8 @@ static void server_err(const char *str)
     exit(-1);
 }
 
-static char target[] = "/2020test/2020test";
+static char pointcloud_target[] = "/2020test/2020test";
+static char vitalsign_target[] = "/2020test/sendVitalData";
 static char host_port[] = "49.159.114.50:10003";
 static char dss_devif[] = "/dev/ttyACM1";
 struct radar01_io_info_t *iwr1642_dss_blk;
@@ -92,7 +93,10 @@ struct device_worker_info {
     int (*process_msg_func_)(uint8_t *, int, void *);
     void (*data_dumper_func_)(void *);
     void (*create_json_func_)(void *, struct radar01_json_entry_t *, size_t);
-    struct radar01_pointcloud_data_t Cartesian;
+    void *real_frame;
+    int real_frame_size;
+    // struct radar01_pointcloud_data_t Cartesian;
+    // struct radar01_vitalsign_data_t VitalSign;
     struct ringbuffer_t *rbuf;
 };
 
@@ -100,6 +104,7 @@ void *device_worker(void *v_param)
 {
     struct device_worker_info *winfo;
     winfo = (struct device_worker_info *) v_param;
+    winfo->rbuf = &dss2http_ring;
     while (!exit_i) {
         int epoll_events_count;
         if ((epoll_events_count =
@@ -116,12 +121,11 @@ void *device_worker(void *v_param)
                     &winfo->ev_recv[0]);
                 if (size > 0) {
                     winfo->process_msg_func_(&winfo->data_buff[0], size,
-                                             &winfo->Cartesian);
-                    winfo->data_dumper_func_(&winfo->Cartesian);
+                                             winfo->real_frame);
+                    winfo->data_dumper_func_(winfo->real_frame);
                     struct radar01_json_entry_t dss_share = {};
-                    winfo->create_json_func_(&winfo->Cartesian, &dss_share,
+                    winfo->create_json_func_(winfo->real_frame, &dss_share,
                                              JSON_SZ);
-                    // radar01_share_msg_dump("Device", &dss_share);
                     dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
                                      sizeof(dss_share));
                 }
@@ -141,6 +145,7 @@ void *device_worker(void *v_param)
 struct http_worker_info {
     int epoll_fd;
     pthread_t tid;
+    char *target;
     struct radar01_http_user_t hu;
     struct ringbuffer_t *rbuf;
 };
@@ -203,7 +208,7 @@ void *http_worker(void *v_param)
                                   sizeof(http_datapub));
                 memset(&outbuf, 0, 2048);
                 int size = create_http_request_msg(
-                    target, &http_datapub.payload[0],
+                    winfo->target, &http_datapub.payload[0],
                     &(winfo->hu.server_url[0]), outbuf, 2048);
                 if (RADAR01_HTTP_DEBUG_ENABLE == 1)
                     printf("HTTP total request len: %d\n%s\n", size, outbuf);
@@ -311,7 +316,12 @@ int main(int argc, char const *argv[])
         perror("signal(SIGTERM, handler)");
         exit(0);
     }
-
+    /* TODO: Move to long options*/
+    int ep_event = 0;
+    if (argc > 1)
+        if (strcmp(argv[1], "-et") == 0) {
+            ep_event = EPOLLET;
+        }
     /* Init ringbuffer first */
     rb_init(&dss2http_ring, RINGBUFF_SIZE);
     /* code */
@@ -319,11 +329,32 @@ int main(int argc, char const *argv[])
     dev_worker = calloc(1, sizeof(struct device_worker_info));
     if (!dev_worker)
         return -1;
-
-    dev_worker->rbuf = &dss2http_ring;
-    dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
-    dev_worker->data_dumper_func_ = pointcloud_Cartesian_info_dump;
-    dev_worker->create_json_func_ = pointcloud_create_json_msg;
+    static char csv_title[256] = {0};
+    if (found_vitalsign) {
+        dev_worker->process_msg_func_ = process_vitalsign_msg;  // default
+        dev_worker->data_dumper_func_ = vitalsign_stats_dump;
+        dev_worker->create_json_func_ = vitalsign_create_json_msg;
+        dev_worker->real_frame_size = sizeof(struct radar01_vitalsign_data_t);
+        dev_worker->real_frame =
+            calloc(1, sizeof(struct radar01_vitalsign_data_t));
+        strncpy(csv_title, "Frame Seq, BR_Est_FFT, BR_Est_xCorr, BR_peakCount",
+                256);
+    } else {
+        dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
+        dev_worker->data_dumper_func_ = pointcloud_Cartesian_info_dump;
+        dev_worker->create_json_func_ = pointcloud_create_json_msg;
+        dev_worker->real_frame_size = sizeof(struct radar01_pointcloud_data_t);
+        dev_worker->real_frame =
+            calloc(1, sizeof(struct radar01_pointcloud_data_t));
+        strncpy(csv_title,
+                "Frame Seq, Obj_index, x, y, z, velocity, snr, noise", 256);
+    }
+    if (!dev_worker->real_frame) {
+        free(dev_worker->real_frame);
+        printf("[%s:%d] Failed to allocate real_frame buffer, Exit!!\n",
+               __FUNCTION__, __LINE__);
+        goto failed_allloc_real_frame;
+    }
     if (arg_radar_dev == NULL) {
         arg_radar_dev = dss_devif;
     }
@@ -338,12 +369,6 @@ int main(int argc, char const *argv[])
     } else {
         is_device_worker_ready = 1;
     }
-
-    int ep_event = 0;
-    if (argc > 1)
-        if (strcmp(argv[1], "-et") == 0) {
-            ep_event = EPOLLET;
-        }
     /*Device IO init */
     int epoll_fd;
     static struct epoll_event ev;
@@ -362,20 +387,26 @@ int main(int argc, char const *argv[])
 
     /* HTTP Client Init*/
     struct http_worker_info *http_winfo;
-    http_winfo = calloc(1, sizeof(struct http_worker_info));
     uint8_t is_hp_worker_ready = 0;
-    if (http_winfo) {
-        rc = radar01_http_user_init(host_port, (void *) &http_winfo->hu);
-        if (rc < 0)
-            is_hp_worker_ready = 0;
-        else {
-            is_hp_worker_ready = 1;
-        }
+    http_winfo = calloc(1, sizeof(struct http_worker_info));
+    if (!http_winfo) {
+        is_hp_worker_ready = 1;
+        printf("Not enough HTTP worker memory.\n");
+        goto exit_0;
     }
-
-    if (is_device_worker_ready)
-        printf("Frame Seq, Obj_index, x, y, z, velocity, snr, noise\n");
-
+    rc = radar01_http_user_init(host_port, (void *) &http_winfo->hu);
+    if (rc < 0)
+        is_hp_worker_ready = 0;
+    else {
+        is_hp_worker_ready = 1;
+    }
+    http_winfo->target = pointcloud_target;
+    if (found_vitalsign) {
+        http_winfo->target = vitalsign_target;
+    }
+    if (is_device_worker_ready) {
+        printf("%s\n", csv_title);
+    }
     pthread_t dev_tid0;
     if (is_device_worker_ready) {
         rc = pthread_create(&dev_tid0, 0, &device_worker, (void *) dev_worker);
@@ -402,6 +433,11 @@ int main(int argc, char const *argv[])
 exit_0:
     radar01_io_deinit((void *) &iwr1642_dss_blk);
     rb_deinit(&dss2http_ring);
-    // radar01_http_socket_deinit((void *) &arstu_server_blk);
     close(epoll_fd);
+    printf("Free the dev_worker memory.\n");
+    if (dev_worker->real_frame)
+        free(dev_worker->real_frame);
+failed_allloc_real_frame:
+    if (dev_worker)
+        free(dev_worker);
 }

@@ -3,6 +3,7 @@
 #include "linux_common.h"
 #include "radar01_share_msg.h"
 
+#define RADAR01_FRAME_PRINT 1
 #define RADAR01_HEX_DEBUG_ENABLE 0
 #define RADAR01_FTRACE_DEBUG_ENABLE 0
 #define RADAR01_JSON_MSG_DEBUG_ENABLE 0

@@ -7,8 +7,9 @@
 #include "vender/dpif_pointcloud.h"
 #include "vender/mmw_mss.h"
 #include "vender/mmw_output.h"
+#include "vender/vital_signs.h"
 #define MAXIMUM_OBJS 32
-
+#define MAXIMUM_RANGEBINS 128
 struct radar01_pointcloud_data_t {
     uint32_t frameNumber;
     uint32_t numDetectedObj;
@@ -46,11 +47,28 @@ struct radar01_pointcloud_data_t {
     MmwDemo_temperatureStats temp_stats;
 };
 
+struct radar01_vitalsign_data_t {
+    uint32_t frameNumber;
+    uint32_t numDetectedObj;
+    /* VITALSIGN_OUTPUT_MSG_STATS = 0 */
+    VitalSignsDemo_OutputStats stats;
+    /* VITALSIGN_OUTPUT_MSG_RANGE_PROFILE = 1 */
+    // Number of range bins that can be processed
+    // obj->numRangeBinProcessed = obj->rangeBinEndIndex -
+    // obj->rangeBinStartIndex + 1;
+    uint16_t numRangeBinProcessed;
+    uint16_t ptrMatrix[MAXIMUM_RANGEBINS * 2];
+};
 
 int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out);
+int process_vitalsign_msg(uint8_t *rx_buff, int pkt_length, void *out);
 void pointcloud_Cartesian_info_dump(void *datain);
+void vitalsign_stats_dump(void *datain);
 void pointcloud_create_json_msg(void *datain,
                                 struct radar01_json_entry_t *share,
                                 size_t sz_limit);
+void vitalsign_create_json_msg(void *datain,
+                               struct radar01_json_entry_t *share,
+                               size_t sz_limit);
 int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size);
 #endif  //  __RADAR01_TLV_H__

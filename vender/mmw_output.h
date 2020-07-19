@@ -199,6 +199,29 @@ typedef struct MmwDemo_output_message_tl_t
 
 } MmwDemo_output_message_tl;
 
+
+
+/*!
+ * @brief
+ *  Message types used in Millimeter Wave Demo for the communication between
+ *  target and host, and also for Mailbox communication
+ *  between MSS and DSS on the XWR16xx platform. Message types are used to indicate
+ *  different type detection information sent out from the target.
+ *
+ */
+typedef enum VitalSign_output_message_type_e
+{
+
+    /*! @brief   Stats information */
+    VITALSIGN_OUTPUT_MSG_STATS = 0,
+
+    /*! @brief   Range profile */
+    VITALSIGN_OUTPUT_MSG_RANGE_PROFILE,
+
+    VITALSIGN_OUTPUT_MSG_MAX
+
+} VitalSign_output_message_type;
+
 #ifdef __cplusplus
 }
 #endif
