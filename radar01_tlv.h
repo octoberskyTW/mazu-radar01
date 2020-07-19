@@ -49,7 +49,7 @@ struct radar01_pointcloud_data_t {
 
 int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out);
 void pointcloud_Cartesian_info_dump(void *datain);
-void radar01_construct_share_msg(struct radar01_pointcloud_data_t *data,
-                                 struct radar01_ringbuf_entry_t *share);
+void pointcloud_create_json_msg(void *datain,
+                                struct radar01_json_entry_t *share);
 int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size);
 #endif  //  __RADAR01_TLV_H__

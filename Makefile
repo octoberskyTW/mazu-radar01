@@ -15,7 +15,8 @@ CFLAGS += -Os
 CFLAGS += -std=gnu99 -Wall -W
 CFLAGS += -DUNUSED="__attribute__((unused))"
 CFLAGS += -DNDEBUG
-LDFLAGS += -lpthread
+CFLAGS += -ljson-c
+LDFLAGS += -lpthread -ljson-c
 
 
 ##### C Source #####

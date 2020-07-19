@@ -1,4 +1,5 @@
 #include "radar01_tlv.h"
+#include <json-c/json_object.h>
 #include "linux_common.h"
 #include "radar01_utils.h"
 #include "vender/mmw_output.h"
@@ -13,7 +14,6 @@ int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
     MmwDemo_output_message_header msgh = {0};
     memset((uint8_t *) out_data, 0, sizeof(struct radar01_pointcloud_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
-    // if(RADAR01_DEBUG_ENABLE)
     printf("Frame %u: Detected %u objs: numTLVs=%u\n", msgh.frameNumber,
            msgh.numDetectedObj, msgh.numTLVs);
     out_data->frameNumber = msgh.frameNumber;
@@ -66,22 +66,52 @@ void pointcloud_Cartesian_info_dump(void *datain)
     }
 }
 
-void radar01_construct_share_msg(struct radar01_pointcloud_data_t *data,
-                                 struct radar01_ringbuf_entry_t *share)
+void pointcloud_create_json_msg(void *datain,
+                                struct radar01_json_entry_t *share)
 {
-    DPIF_PointCloudSideInfo *side_info = &data->points_side_info[0];
-    DPIF_PointCloudCartesian *points = &data->points[0];
+    struct radar01_pointcloud_data_t *pdata =
+        (struct radar01_pointcloud_data_t *) datain;
+    DPIF_PointCloudSideInfo *side_info = &pdata->points_side_info[0];
+    DPIF_PointCloudCartesian *points = &pdata->points[0];
 
-    share->frameNumber = data->frameNumber;
-    share->numDetectedObj = data->numDetectedObj;
-    for (uint32_t i = 0; i < data->numDetectedObj; i++) {
-        share->x_pos[i] = points[i].x;
-        share->y_pos[i] = points[i].y;
-        share->z_pos[i] = points[i].z;
-        share->velocity[i] = points[i].velocity;
-        share->snr[i] = side_info[i].snr;
-        share->noise[i] = side_info[i].noise;
+    json_object *jarr;
+    json_object *jobj[32] = {NULL};
+    jarr = json_object_new_array();
+
+    for (uint32_t i = 0; i < pdata->numDetectedObj; i++) {
+        char val_str[128] = {0};
+        jobj[i] = json_object_new_object();
+        json_object_object_add(jobj[i], "frm_seq",
+                               json_object_new_int(pdata->frameNumber));
+        json_object_object_add(jobj[i], "obj_idx", json_object_new_int(i));
+
+        snprintf(val_str, 128, "%8.6f", points[i].x);
+        json_object_object_add(jobj[i], "x", json_object_new_string(val_str));
+        snprintf(val_str, 128, "%8.6f", points[i].y);
+        json_object_object_add(jobj[i], "y", json_object_new_string(val_str));
+        // snprintf(val_str, 128, "%8.6f", points[i].z);
+        // json_object_object_add(jobj[i],"z", json_object_new_string(val_str));
+        // /* velocity */
+        // snprintf(val_str, 128, "%8.6f", points[i].velocity);
+        // json_object_object_add(jobj[i],"velocity",
+        // json_object_new_string(val_str));
+
+        json_object_object_add(jobj[i], "snr",
+                               json_object_new_int(side_info[i].snr));
+        json_object_object_add(jobj[i], "noise",
+                               json_object_new_int(side_info[i].noise));
+        json_object_array_add(jarr, jobj[i]);
     }
+
+    snprintf(share->payload, 1024, "data=%s",
+             json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
+    share->length = strlen(share->payload);
+    if (RADAR01_JSON_MSG_DEBUG_ENABLE == 1)
+        printf("JSON Raw data Length:%d, data=%s\n", share->length,
+               json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
+    for (uint32_t i = 0; i < pdata->numDetectedObj; i++)
+        json_object_put(jobj[i]);
+    json_object_put(jarr);
 }
 
 int dss_ring_enqueue(struct ringbuffer_t *rbuf, void *payload, uint32_t size)

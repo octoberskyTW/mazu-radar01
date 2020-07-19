@@ -29,6 +29,7 @@ static void server_err(const char *str)
 
 static char target[] = "/2020test/2020test";
 static char host_port[] = "49.159.114.50:10003";
+static char dss_devif[] = "/dev/ttyACM1";
 struct radar01_io_info_t *iwr1642_dss_blk;
 struct radar01_io_info_t *iwr1642_mss_blk;
 struct radar01_http_user_t *arstu_server_blk;
@@ -90,6 +91,7 @@ struct device_worker_info {
     uint8_t data_buff[1024];
     int (*process_msg_func_)(uint8_t *, int, void *);
     void (*data_dumper_func_)(void *);
+    void (*create_json_func_)(void *, struct radar01_json_entry_t *);
     struct radar01_pointcloud_data_t Cartesian;
     struct ringbuffer_t *rbuf;
 };
@@ -116,9 +118,9 @@ void *device_worker(void *v_param)
                     winfo->process_msg_func_(&winfo->data_buff[0], size,
                                              &winfo->Cartesian);
                     winfo->data_dumper_func_(&winfo->Cartesian);
-                    struct radar01_ringbuf_entry_t dss_share = {};
-                    radar01_construct_share_msg(&winfo->Cartesian, &dss_share);
-                    radar01_share_msg_dump("Device", &dss_share);
+                    struct radar01_json_entry_t dss_share = {};
+                    winfo->create_json_func_(&winfo->Cartesian, &dss_share);
+                    // radar01_share_msg_dump("Device", &dss_share);
                     dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
                                      sizeof(dss_share));
                 }
@@ -142,25 +144,6 @@ struct http_worker_info {
     struct ringbuffer_t *rbuf;
 };
 
-int construct_upload_data(struct radar01_ringbuf_entry_t *in,
-                          char *out,
-                          size_t size)
-{
-    int offset = 0;
-    memset(out, 0, size);
-    snprintf(out, size, "data=[");
-    offset = strlen(out);
-    for (uint32_t i = 0; i < in->numDetectedObj; i++) {
-        snprintf(out + offset, size - offset,
-                 "{\"obj\":\"%u\",\"x\":\"%f\",\"y\":\"%f\",\"snr\":\"%d\","
-                 "\"noise\":\"%d\"},",
-                 i, in->x_pos[i], in->y_pos[i], in->snr[i], in->noise[i]);
-        offset = strlen(out);
-    }
-    snprintf(out + offset - 1, size, "] ");
-    offset = strlen(out);
-    return offset;
-}
 /* ToDo: Use epoll socket */
 void *http_worker(void *v_param)
 {
@@ -179,9 +162,9 @@ void *http_worker(void *v_param)
     /* Connect to same Host*/
     for (int i = 0; i < CONCURRENCY; ++i)
         http_connect_server(winfo->epoll_fd, hconn + i, &winfo->hu.http_addr);
-    static struct radar01_ringbuf_entry_t http_share = {};
-    char outbuf[2048] = {0};
-    char msg[1024] = {0};
+    static struct radar01_json_entry_t http_datapub = {};
+
+    static char outbuf[2048] = {0};
     char inbuf[1024] = {0};
     while (!exit_i) {
         do {
@@ -214,15 +197,15 @@ void *http_worker(void *v_param)
             ehc = (struct radar01_http_conn_t *) ev_recv[n].data.ptr;
             if (ev_recv[n].events & EPOLLOUT) {
                 /*Dequeue data from the dss first*/
-                memset(&http_share, 0, sizeof(struct radar01_ringbuf_entry_t));
-                http_ring_dequeue(winfo->rbuf, (void *) &http_share,
-                                  sizeof(http_share));
-                radar01_share_msg_dump("HTTP", &http_share);
-                construct_upload_data(&http_share, msg, 1024);
+                memset(&http_datapub, 0, sizeof(struct radar01_json_entry_t));
+                http_ring_dequeue(winfo->rbuf, (void *) &http_datapub,
+                                  sizeof(http_datapub));
+                memset(&outbuf, 0, 2048);
                 int size = create_http_request_msg(
-                    target, msg, &(winfo->hu.server_url[0]), outbuf, 2048);
+                    target, &http_datapub.payload[0],
+                    &(winfo->hu.server_url[0]), outbuf, 2048);
                 if (RADAR01_HTTP_DEBUG_ENABLE == 1)
-                    printf("Total request length: %d\n%s\n", size, outbuf);
+                    printf("HTTP total request len: %d\n%s\n", size, outbuf);
                 /* Send the http request */
                 int ret =
                     radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
@@ -340,9 +323,9 @@ int main(int argc, char const *argv[])
     dev_worker->rbuf = &dss2http_ring;
     dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
     dev_worker->data_dumper_func_ = pointcloud_Cartesian_info_dump;
+    dev_worker->create_json_func_ = pointcloud_create_json_msg;
     if (arg_radar_dev == NULL) {
-        static char devf[] = "/dev/ttyACM1";
-        arg_radar_dev = devf;
+        arg_radar_dev = dss_devif;
     }
 
     rc = radar01_io_init(arg_radar_dev, (void *) &iwr1642_dss_blk);

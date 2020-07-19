@@ -2,7 +2,7 @@
 
 void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen)
 {
-    if (RADAR01_DEBUG_ENABLE == 0)
+    if (RADAR01_HEX_DEBUG_ENABLE == 0)
         return;
     uint8_t *pt;
     int x;
@@ -18,19 +18,6 @@ void debug_hex_dump(char *str, uint8_t *pSrcBufVA, int SrcBufLen)
         }
     }
     debug_print("\n");
-}
-
-void radar01_share_msg_dump(char *title, struct radar01_ringbuf_entry_t *share)
-{
-    if (RADAR01_SHARE_MSG_DEBUG_ENABLE == 0)
-        return;
-    printf("%s:%p, Frame: %u, DetectedObjs = %u\n\r", title, share,
-           share->frameNumber, share->numDetectedObj);
-    for (uint32_t i = 0; i < share->numDetectedObj; i++) {
-        printf("%u, obj_%u, %f, %f, %f, %f, %d, %d\n", share->frameNumber, i,
-               share->x_pos[i], share->y_pos[i], share->z_pos[i],
-               share->velocity[i], share->snr[i], share->noise[i]);
-    }
 }
 
 static struct timespec g_timestamp;

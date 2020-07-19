@@ -148,7 +148,7 @@ int create_http_request_msg(char *target,
     snprintf(request, size, "POST %s?%s", target, msg);
     offset = strlen(request);
 
-    snprintf(request + offset, size - offset, "HTTP/1.1\r\n");
+    snprintf(request + offset, size - offset, " HTTP/1.1\r\n");
     offset = strlen(request);
     /* Construnt Header */
     snprintf(request + offset, size - offset, "Host: %s\r\n", host);
