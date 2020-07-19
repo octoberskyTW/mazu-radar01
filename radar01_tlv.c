@@ -14,8 +14,9 @@ int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
     MmwDemo_output_message_header msgh = {0};
     memset((uint8_t *) out_data, 0, sizeof(struct radar01_pointcloud_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
-    printf("Frame %u: Stamp %u: Detected %u objs: TLVs=%u\n", msgh.frameNumber,
-           msgh.timeCpuCycles, msgh.numDetectedObj, msgh.numTLVs);
+    printf("# Frame %u: Stamp %u: Detected %u objs: TLVs=%u\n",
+           msgh.frameNumber, msgh.timeCpuCycles, msgh.numDetectedObj,
+           msgh.numTLVs);
     out_data->frameNumber = msgh.frameNumber;
     out_data->numDetectedObj = msgh.numDetectedObj;
     pData += sizeof(MmwDemo_output_message_header);
