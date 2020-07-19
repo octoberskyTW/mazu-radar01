@@ -91,7 +91,7 @@ struct device_worker_info {
     uint8_t data_buff[1024];
     int (*process_msg_func_)(uint8_t *, int, void *);
     void (*data_dumper_func_)(void *);
-    void (*create_json_func_)(void *, struct radar01_json_entry_t *);
+    void (*create_json_func_)(void *, struct radar01_json_entry_t *, size_t);
     struct radar01_pointcloud_data_t Cartesian;
     struct ringbuffer_t *rbuf;
 };
@@ -119,7 +119,8 @@ void *device_worker(void *v_param)
                                              &winfo->Cartesian);
                     winfo->data_dumper_func_(&winfo->Cartesian);
                     struct radar01_json_entry_t dss_share = {};
-                    winfo->create_json_func_(&winfo->Cartesian, &dss_share);
+                    winfo->create_json_func_(&winfo->Cartesian, &dss_share,
+                                             JSON_SZ);
                     // radar01_share_msg_dump("Device", &dss_share);
                     dss_ring_enqueue(winfo->rbuf, (void *) &dss_share,
                                      sizeof(dss_share));
@@ -207,8 +208,7 @@ void *http_worker(void *v_param)
                 if (RADAR01_HTTP_DEBUG_ENABLE == 1)
                     printf("HTTP total request len: %d\n%s\n", size, outbuf);
                 /* Send the http request */
-                int ret =
-                    radar01_http_send(ehc->sockfd, outbuf, strlen(outbuf));
+                int ret = radar01_http_send(ehc->sockfd, outbuf, size);
 
                 if (ret > 0) {
                     /* write done? schedule read */

@@ -14,8 +14,8 @@ int process_pointcloud_msg(uint8_t *rx_buff, int pkt_length, void *out)
     MmwDemo_output_message_header msgh = {0};
     memset((uint8_t *) out_data, 0, sizeof(struct radar01_pointcloud_data_t));
     memcpy(&msgh, rx_buff, sizeof(MmwDemo_output_message_header));
-    printf("Frame %u: Detected %u objs: numTLVs=%u\n", msgh.frameNumber,
-           msgh.numDetectedObj, msgh.numTLVs);
+    printf("Frame %u: Stamp %u: Detected %u objs: TLVs=%u\n", msgh.frameNumber,
+           msgh.timeCpuCycles, msgh.numDetectedObj, msgh.numTLVs);
     out_data->frameNumber = msgh.frameNumber;
     out_data->numDetectedObj = msgh.numDetectedObj;
     pData += sizeof(MmwDemo_output_message_header);
@@ -67,7 +67,8 @@ void pointcloud_Cartesian_info_dump(void *datain)
 }
 
 void pointcloud_create_json_msg(void *datain,
-                                struct radar01_json_entry_t *share)
+                                struct radar01_json_entry_t *share,
+                                size_t sz_limit)
 {
     struct radar01_pointcloud_data_t *pdata =
         (struct radar01_pointcloud_data_t *) datain;
@@ -89,12 +90,12 @@ void pointcloud_create_json_msg(void *datain,
         json_object_object_add(jobj[i], "x", json_object_new_string(val_str));
         snprintf(val_str, 128, "%8.6f", points[i].y);
         json_object_object_add(jobj[i], "y", json_object_new_string(val_str));
-        // snprintf(val_str, 128, "%8.6f", points[i].z);
-        // json_object_object_add(jobj[i],"z", json_object_new_string(val_str));
+        snprintf(val_str, 128, "%8.6f", points[i].z);
+        json_object_object_add(jobj[i], "z", json_object_new_string(val_str));
         // /* velocity */
-        // snprintf(val_str, 128, "%8.6f", points[i].velocity);
-        // json_object_object_add(jobj[i],"velocity",
-        // json_object_new_string(val_str));
+        snprintf(val_str, 128, "%8.6f", points[i].velocity);
+        json_object_object_add(jobj[i], "velocity",
+                               json_object_new_string(val_str));
 
         json_object_object_add(jobj[i], "snr",
                                json_object_new_int(side_info[i].snr));
@@ -103,9 +104,12 @@ void pointcloud_create_json_msg(void *datain,
         json_object_array_add(jarr, jobj[i]);
     }
 
-    snprintf(share->payload, 1024, "data=%s",
+    snprintf(share->payload, sz_limit, "data=%s",
              json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
     share->length = strlen(share->payload);
+    if (share->length > (int) sz_limit)
+        printf("[WARNING] JSON Size overflow %d, expect: %d\n", share->length,
+               (int) sz_limit);
     if (RADAR01_JSON_MSG_DEBUG_ENABLE == 1)
         printf("JSON Raw data Length:%d, data=%s\n", share->length,
                json_object_to_json_string_ext(jarr, JSON_C_TO_STRING_NOZERO));
