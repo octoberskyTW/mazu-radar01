@@ -337,8 +337,10 @@ int main(int argc, char const *argv[])
         dev_worker->real_frame_size = sizeof(struct radar01_vitalsign_data_t);
         dev_worker->real_frame =
             calloc(1, sizeof(struct radar01_vitalsign_data_t));
-        strncpy(csv_title, "Frame Seq, BR_Est_FFT, BR_Est_xCorr, BR_peakCount",
-                256);
+        strncpy(
+            csv_title,
+            "Frame Seq, OF_HeartOut, BR_Est_FFT, BR_Est_xCorr, BR_peakCount",
+            256);
     } else {
         dev_worker->process_msg_func_ = process_pointcloud_msg;  // default
         dev_worker->data_dumper_func_ = pointcloud_Cartesian_info_dump;

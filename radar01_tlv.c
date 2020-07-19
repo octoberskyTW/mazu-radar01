@@ -119,7 +119,8 @@ void vitalsign_stats_dump(void *datain)
     if (RADAR01_CSV_DEBUG_ENABLE == 0)
         return;
     VitalSignsDemo_OutputStats *stats = &data->stats;
-    printf("%u, %f, %f, %f\n", data->frameNumber, stats->breathingRateEst_FFT,
+    printf("%u, %f, %f, %f, %f\n", data->frameNumber,
+           stats->outputFilterHeartOut, stats->breathingRateEst_FFT,
            stats->breathingRateEst_xCorr, stats->breathingRateEst_peakCount);
 }
 
